@@ -15,8 +15,7 @@
 #define MAXWORDS 128
 
 void prompt();
-char *parse_path(char*curr,char * path);
-char *parse2(char*curr,char * path, char* to);
+char *parse_path(char*curr,char * path, char* to);
 char *trim(char *str);
 
 
@@ -151,8 +150,8 @@ int main(int argc, char *argv[], char *envp[])
 	int redirections[MAXWORDS];
 	int words_count = split_str(buf, words, redirections);
 	if (words_count<0) 
-	    printf("error!\n");
-	else
+	    printf("Invalid syntax: [%s].\n",buf);
+/*	else
 	{
 	    int ii;
 	    for (ii=0; ii< words_count;ii++)
@@ -161,7 +160,7 @@ int main(int argc, char *argv[], char *envp[])
 	    for (ii=0; redirections[ii]>=0;ii++)
 		printf("%d\t[%d]\n",ii,redirections[ii]);
 	} 	
-
+*/
 	if ( cptr != NULL)
 	{
 	    if (strncmp("exit", buf, 4) ==0)
@@ -196,10 +195,9 @@ int main(int argc, char *argv[], char *envp[])
 		    printf("Cannot push directory onto stack: out of stack space");
 		else
 		{   
-		    tmp[0]='\0';
-		    strncpy (tmp, buf+6, sizeof(buf)-6);
-		    char *path = parse_path(curr_path,tmp);
-		    dir_stack[used_dir_stack] = path;
+		    char temp[MAXCMDLEN];
+		    parse_path(curr_path, words[1], temp);
+		    dir_stack[used_dir_stack] = temp;
 		    used_dir_stack ++;
 		}
 	    }
@@ -211,10 +209,10 @@ int main(int argc, char *argv[], char *envp[])
                 {
 		    used_dir_stack--;
 		    chdir(dir_stack[used_dir_stack]);
-		    dir_stack[used_dir_stack][0] = '\0';
+		    dir_stack[used_dir_stack] = NULL;
 		    if (!GetCurrDir(curr_path, sizeof(curr_path) ))
 			return errno;
-		    curr_path[sizeof(curr_path)-1] = '\0'; //to be sure
+//		    curr_path[sizeof(curr_path)-1] = '\0'; //to be sure
 		}
 	    }
 	    else if (strncmp("cd", buf, 2) ==0)
@@ -224,7 +222,7 @@ int main(int argc, char *argv[], char *envp[])
                 strcpy (tmp, buf+3 );
 		trim(tmp);
 		char to[MAXPATHLEN];
-	        parse2(curr_path,tmp, to);
+	        parse_path(curr_path,tmp, to);
 //		char * new_path = parse_path(curr_path,tmp);
 		if ((result = chdir(to)) != 0)
 		    printf("error occured changing into %s : %d", tmp, result);
@@ -255,54 +253,8 @@ void prompt()
 {
     printf("[%s %s]$ ",host, curr_path);
 }
-char * parse_path(char*curr, char * path)
-{
-    trim(path); 
-//    fprintf(stdout,"curr: %s \tpath:%s\n",curr,path);
-    int len;
-    if (curr[strlen(curr)-1] =='/') curr[strlen(curr)-1]='\0';
-    if (curr[0]=='\0') { curr[0]='/';curr[1]='\0';}
-    if (path[0] =='\0')
-	return curr;
-    else if (path[0] == '/') //we have an absolute path
-    {
-//	printf("%s\n",path);
-	return path;
-    }
-    else if (strcmp(path,"..") ==0 || strncmp(path,"../",3)==0)
-    {
-	if (path[2] == '\0') 
-	    path[3]='\0'; //so that I can trim the first 3 characters
-	//get one dir above
-	char * tmp = strrchr(curr,'/');
-	len = (&curr-&tmp);
-	if (len > strlen(curr)) len=0;
-	// get first len-1 chars from curr
-	curr[len]='\0';
-	return parse_path(curr, path+3);
-    }
-    else if (path[0] == '.' &&(path[1] == '/' || path[1] =='\0'))
-    {
-	return parse_path(curr, path+2);	
-    }
-    else
-    {
-	char * tmp = strchr(path,'/');
-        len = (&path-&tmp);
-	path_buf[0]='\0';
-	strncpy(path_buf, path, len);
-	if (strlen(curr) > 1)
-	{
-	    curr[strlen(curr)+1]='\0';
-	    curr[strlen(curr)]='/';
-	}
-//	strcat(curr, "/");
-	strcat(curr, path_buf);
-	return parse_path(curr, path+len);
-    }
-}
 
-char* parse2(char * curr, char * path, char* to)
+char* parse_path(char * curr, char * path, char* to)
 {
     char buffer[2*MAXPATHLEN];
     trim(path);
