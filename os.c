@@ -339,6 +339,7 @@ int file_redirects ( char ** words, const int * redirections)
                     dup ( fileno ( file ) );
                     changed++;
                     //TODO: can we close the file here
+		    words[* ( redirections + offset ) ] = NULL;
                 }
                 break;
             case '>':
@@ -349,6 +350,7 @@ int file_redirects ( char ** words, const int * redirections)
                     close ( 1 );
                     dup ( fileno ( file ) );
                     changed++;
+		    words[* ( redirections + offset ) ] = NULL;
                     //TODO: can we close the file here
 
 		    //stderr goes to /dev/null
@@ -381,7 +383,7 @@ int exec_command ( char ** words, const int *redirections )
 {
     if ( strcmp ( words[0], "exit" ) == 0 ) exit ( 0 );
     FUNCTION funcptr = find_local_func ( words[0] );
-    int pc[2], cp[2];
+/*    int pc[2], cp[2];
     if ( pipe ( pc ) < 0 )
     {
         perror ( "Can't make pipe" );
@@ -391,8 +393,8 @@ int exec_command ( char ** words, const int *redirections )
     {
         perror ( "Can't make pipe" );
         exit ( 1 );
-    }
-    else if ( detect_pipes ( words, redirections ) == 0)
+    }*/
+    if ( detect_pipes ( words, redirections ) == 0)
     {
         int pid = fork();
         if ( pid == -1 ) {
@@ -402,7 +404,7 @@ int exec_command ( char ** words, const int *redirections )
         else if ( pid == 0 )
         {
             file_redirects ( words, redirections );
-            if ( funcptr != NULL && detect_pipes ( words, redirections ) == 0 )
+            if ( funcptr != NULL )
             {
                 //local command, no pipes
                 int ret_code =  funcptr ( (const char * ) words[0], (const char ** )words + 1 );
@@ -450,7 +452,7 @@ int exec_command ( char ** words, const int *redirections )
 	    else if ( pid == 0 ) //grandchild
 	    {
 		// setup outgoing pipes
-		fprintf(stderr, "grandchild\n");
+/*		fprintf(stderr, "grandchild\n");
 		close(1);
 		dup( cp[1]);
 		close(0);
@@ -491,7 +493,7 @@ int exec_command ( char ** words, const int *redirections )
 		file_redirects ( words, redirections ); //files have priority
 		execvp ( words[0], words );
 		//set input to grandchild
-		/*while(  read(0, &ch, 1) > 0 )
+*/		/*while(  read(0, &ch, 1) > 0 )
 		{
 		    write(pc[1],&ch, 1);
 		    write(1, &ch, 1);
@@ -504,24 +506,24 @@ int exec_command ( char ** words, const int *redirections )
 		    write(1, &ch, 1);
 		}*/
 		//wait for child to end execution
-		int status;
+/*		int status;
 		waitpid ( pid, &status, 0 );
 		exit( WEXITSTATUS ( status ) );
 	    }
-	    /*
+*/	    /*
 	    parent = shell. it gathers the return code
 	    child ->  sets up pipes. execvp self
 	    grandchild -> reads pipe. execvp self
 
 	*/
-	}
+/*	}
 	else
 	{
 	    int status;
             waitpid ( toppid, &status, 0 );
             return WEXITSTATUS ( status );
 	}
-	
+*/	
 	
 /*
         words[*redirections] = NULL;
@@ -530,6 +532,8 @@ int exec_command ( char ** words, const int *redirections )
             exit ( funcptr ( words[0], words + 1 ) );
         }
         execvp ( words[0], words );*/
+	    }
+	}
     }
 }
 
