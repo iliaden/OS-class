@@ -37,6 +37,7 @@ int split_str ( char * string, char ** to, int * redirections );
 
 char curr_path[MAXPATHLEN];
 char ** dir_stack;
+char ** environment;
 char * path_buf, *hist_path;
 int used_dir_stack = 0;
 int last_code = 0;
@@ -56,6 +57,7 @@ int cd ( const char * path )
         if ( !GetCurrDir ( curr_path, sizeof ( curr_path ) ) )
             return errno;
         curr_path[sizeof ( curr_path ) - 1] = '\0'; //to be sure
+	setenv("PWD",curr_path,1);
     }
     return 0;
 }
@@ -88,10 +90,11 @@ int echo_func ( const char *name, const char * args[] )
 	    if (first)
             {
                 first=0;
-                printf ( "%s", curr_path );
+                printf ( "%s", getenv("PWD"));//curr_path );
             }
             else
-                printf ( " %s", curr_path );
+                printf ( " %s", getenv("PWD"));//curr_path );
+//                printf ( " %s", curr_path );
 	}
         else if ( !escape ) {
 	    if (first)
@@ -153,6 +156,12 @@ int pushd_func ( const char *name, const char * args[] )
 }
 int env_func ( const char *name, const char * args[] )
 {
+    char ** env;
+    for ( env = environment; *env != 0 ;env++)
+    {
+	char * this_env = *env;
+	printf ("%s\n", this_env);
+    }
     return 0;
 }
 int set_func ( const char *name, const char * args[] )
@@ -161,6 +170,7 @@ int set_func ( const char *name, const char * args[] )
 }
 int unset_func ( const char *name, const char * args[] )
 {
+    unsetenv( args[0] );
     return 0;
 }
 	int exit_func ( const char *name, const char * args[] )
@@ -276,6 +286,26 @@ int split_str ( char * string, char ** to, int * redirections )
             }
             position++;
             break;
+	case '$':
+	    //get string until space, quote or pipe
+	    char tmp[MAXCMDLEN];
+	    position++;
+	    while ( string[position] != '\0'
+		 && string[position] != '>'
+		 && string[position] != '<'
+		 && string[position] != '|'
+		 && string[position] != '"'
+		 && string[position] != '\'' )
+	    {
+		tmp[position-1] = string[position];
+		position++;
+	    }
+	    tmp[position-1]='\0';
+	    position--;
+	    char * env = getenv(position);
+	    strcat(currword, env);
+	    break;
+
         default:
             currword[wordlen++] = string[position];
             break;
@@ -540,6 +570,7 @@ int exec_command ( char ** words, const int *redirections )
 
 int main ( int argc, char *argv[], char *envp[] )
 {
+    environment = envp;
     dir_stack = ( char ** ) malloc ( sizeof ( char * ) * 100 );
     path_buf = ( char* ) malloc ( sizeof ( char ) * MAXPATHLEN );
     host[0] = '\0';
