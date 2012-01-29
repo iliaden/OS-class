@@ -155,7 +155,7 @@ int pushd_func ( const char *name, const char * args[] )
     return 0;
 }
 int env_func ( const char *name, const char * args[] )
-{
+{ //FIXME: update unvironment
     char ** env;
     for ( env = environment; *env != 0 ;env++)
     {
@@ -166,6 +166,7 @@ int env_func ( const char *name, const char * args[] )
 }
 int set_func ( const char *name, const char * args[] )
 {
+    putenv(args[0]);
     return 0;
 }
 int unset_func ( const char *name, const char * args[] )
@@ -173,7 +174,7 @@ int unset_func ( const char *name, const char * args[] )
     unsetenv( args[0] );
     return 0;
 }
-	int exit_func ( const char *name, const char * args[] )
+int exit_func ( const char *name, const char * args[] )
 {
     exit ( 0 );
     return 0;
@@ -222,6 +223,17 @@ struct {
         {"exit", exit_func},
         {NULL, NULL}
     };
+int contains_equal( char ** words )
+{ // returns 1 if first word has an equal sign. return 0 otherwise
+    char * str = words[0];
+    int ii;
+    for (ii =0; ii< strlen(str);ii++)
+    {
+	if ( str[ii] == '=' )
+	    return 1;
+    }
+    return 0;
+}
 
 int split_str ( char * string, char ** to, int * redirections )
 {
@@ -285,10 +297,42 @@ int split_str ( char * string, char ** to, int * redirections )
                 return -1;
             }
             position++;
+	    // if currword starts with '$', replace it with the variable's value
+	    if ( currword[0] == '$' && quote == '"')
+	    {
+		currword[wordlen] = '\0';
+//		printf ("huzza!\n");
+//		printf("currword = [%s]\n",currword+1);
+	        char * envvar = getenv(currword+1);
+		if ( strcmp ( currword+1, "?" ) == 0) 
+		{
+		    envvar = (char * )malloc(sizeof(char)*100);
+		    snprintf( envvar, 2, "%d", last_code);
+		    envvar[strlen(envvar)] = '\0';
+		}
+//		printf("envvar = [%s]\n",envvar);
+		int ii;
+		currword[wordlen] = '\0';
+		if (envvar != NULL )
+		{
+		    for ( ii=0; ii< strlen(envvar); ii++)
+			currword[ii] = envvar[ii];
+		    currword[ii]='\0';
+		}   
+		else
+		{
+		    currword[0]='\0';
+		}
+		wordlen = strlen(currword);
+		free(envvar);
+	    //    to[wordcount++] = strdup ( currword );
+	    }
             break;
 	case '$':
+	{
 	    //get string until space, quote or pipe
 	    char tmp[MAXCMDLEN];
+	    int startpos = position;
 	    position++;
 	    while ( string[position] != '\0'
 		 && string[position] != '>'
@@ -297,15 +341,26 @@ int split_str ( char * string, char ** to, int * redirections )
 		 && string[position] != '"'
 		 && string[position] != '\'' )
 	    {
-		tmp[position-1] = string[position];
+		tmp[position-startpos-1] = string[position];
 		position++;
 	    }
-	    tmp[position-1]='\0';
+	    tmp[position-startpos-1]='\0';
 	    position--;
-	    char * env = getenv(position);
-	    strcat(currword, env);
+	    char * envvar = getenv(tmp);
+	    if ( strcmp ( tmp, "?" ) == 0) 
+	    {
+		envvar = (char * )malloc(sizeof(char)*100);
+		snprintf( envvar, 2, "%d", last_code);
+		envvar[strlen(envvar)] = '\0';
+	    }
+	    currword[wordlen] = '\0';
+	    if (envvar != NULL )
+		strcat(currword, envvar);
+	    wordlen = strlen(currword);
+	    free(envvar);
+//	    to[wordcount++] = strdup ( currword );
 	    break;
-
+	}
         default:
             currword[wordlen++] = string[position];
             break;
@@ -315,6 +370,16 @@ int split_str ( char * string, char ** to, int * redirections )
     to[wordcount++] = strdup ( currword );
     to[wordcount] = NULL;
     *redirections = -1;
+
+    // if first word has equality, prepend "set"
+    if (contains_equal( to ) )
+    {
+	int ii;
+	for ( ii =wordcount+1; ii > 0 ;ii--)
+	    to[wordcount] = to[wordcount-1];
+	to[0] = "set";
+	to[wordcount+1] = NULL;
+    }
     return wordcount;
 }
 
@@ -481,6 +546,7 @@ int exec_command ( char ** words, const int *redirections )
 	    }
 	    else if ( pid == 0 ) //grandchild
 	    {
+		return 1;
 		// setup outgoing pipes
 /*		fprintf(stderr, "grandchild\n");
 		close(1);
