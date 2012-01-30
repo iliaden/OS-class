@@ -324,7 +324,7 @@ int split_str ( char * string, char ** to, int * redirections )
 		    currword[0]='\0';
 		}
 		wordlen = strlen(currword);
-		free(envvar);
+	//	free(envvar);
 	    //    to[wordcount++] = strdup ( currword );
 	    }
             break;
@@ -357,7 +357,7 @@ int split_str ( char * string, char ** to, int * redirections )
 	    if (envvar != NULL )
 		strcat(currword, envvar);
 	    wordlen = strlen(currword);
-	    free(envvar);
+	    //free(envvar);
 //	    to[wordcount++] = strdup ( currword );
 	    break;
 	}
@@ -528,6 +528,7 @@ int exec_command ( char ** words, const int *redirections )
     }
     else
     {   //pipes... they suck donkey balls
+	int fd[2];
 	int toppid = fork();
 	if (toppid < 0 ){
             printf ( "Fork Failed\n" );
@@ -535,6 +536,7 @@ int exec_command ( char ** words, const int *redirections )
         }
 	else if ( toppid == 0)
 	{
+	    pipe(fd);
 	    int pipe_separator =0;
 	    while (strcmp(words[* (pipe_separator + redirections)], "|") != 0 )
 		pipe_separator++;
@@ -546,89 +548,30 @@ int exec_command ( char ** words, const int *redirections )
 	    }
 	    else if ( pid == 0 ) //grandchild
 	    {
-		return 1;
+		close(fd[1]);
+		close(0);
+		dup(fd[0]);
+		//prepare words and execute
+		words+=* (pipe_separator + redirections)+1;
+		execvp(words[0], words);
 		// setup outgoing pipes
-/*		fprintf(stderr, "grandchild\n");
-		close(1);
-		dup( cp[1]);
-		close(0);
-		dup( pc[0]);
-//		close(pc[1]);
-//		close(cp[0]);
-		
-		
-		//take casre of reading everything AFTER the pipe
-		words+= (redirections[pipe_separator]) + 1;
-		redirections += pipe_separator;
-
-		file_redirects ( words, redirections ); //files have priority
-		if ( funcptr != NULL ) 
-		{
-		    int ret_code =  funcptr ( (const char * ) words[0], (const char ** )words + 1 );
-		    exit( ret_code);
-		}
-
-
-		execvp ( words[0], words );
-		perror("No exec");
-//		signal(getppid(), SIGQUIT);
-		exit(1);
 	    }
-	    else //child
-	    { 
-		fprintf(stderr, "child\n");
-		//take casre of reading everything BEFORE the pipe
-		words[redirections[pipe_separator] ] = NULL;
-//		*(redirections+pipe_separator) = -1; //FIXME: what the fuck is wrong here?
-	    
-		char ch;
-		close(0);
-		dup(cp[0]);
+	    else
+	    { //child
+		close(fd[0]);
 		close(1);
-		dup(pc[1]);
-		file_redirects ( words, redirections ); //files have priority
-		execvp ( words[0], words );
-		//set input to grandchild
-*/		/*while(  read(0, &ch, 1) > 0 )
-		{
-		    write(pc[1],&ch, 1);
-		    write(1, &ch, 1);
-		}
-		close(pc[1]);
-		//set output from grandchild
-		close(cp[1]);
-		while( read(cp[0], &ch, 1) == 1)
-		{
-		    write(1, &ch, 1);
-		}*/
-		//wait for child to end execution
-/*		int status;
-		waitpid ( pid, &status, 0 );
-		exit( WEXITSTATUS ( status ) );
-	    }
-*/	    /*
-	    parent = shell. it gathers the return code
-	    child ->  sets up pipes. execvp self
-	    grandchild -> reads pipe. execvp self
+		dup(fd[1]);
+		//prepare words and execute
+		words[* (pipe_separator + redirections)] = NULL;
+		execvp(words[0], words);
 
-	*/
-/*	}
+	    }
+	}
 	else
 	{
-	    int status;
+            int status;
             waitpid ( toppid, &status, 0 );
             return WEXITSTATUS ( status );
-	}
-*/	
-	
-/*
-        words[*redirections] = NULL;
-        if ( funcptr != NULL )
-        {
-            exit ( funcptr ( words[0], words + 1 ) );
-        }
-        execvp ( words[0], words );*/
-	    }
 	}
     }
 }
