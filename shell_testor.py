@@ -17,19 +17,18 @@ import unittest
 
 sh = ''
 
+sys.stderr = sys.stdout
+
 class TestYourShell(unittest.TestCase):
     
     def setUp(self):
-        try:
-            env = os.environ
-            env['FAV_TV'] = 'Dr. House'
-            self.sh = Popen([sh], 
-                    stdin=PIPE,
-                    stdout=PIPE,
-                    stderr=PIPE,
-                    env=env)
-        except:
-            raise Exception("Can't execute your shell [%s]" % sh)
+        env = os.environ
+        env['FAV_TV'] = 'Dr. House'
+        self.sh = Popen([sh], 
+                stdin=PIPE,
+                stdout=PIPE,
+                stderr=PIPE,
+                env=env)
 
     echo_commands = '''echo aaa
     echo bbb ccc
@@ -60,17 +59,12 @@ class TestYourShell(unittest.TestCase):
         self.assert_(history[-1].endswith('history'),
                 'The last command is not \'history\'')
 
-    set_command = '''boss=cai
-    echo "$boss"
-    unset boss
-    echo "$boss"
-    '''
+    set_command = 'unset boss\n'
     def test_unset(self):
         self.out, self.err = self.sh.communicate(self.set_command)
         self.assert_success()
 
-        self.assertEqual(self.out, 'cai\n\n', 
-                "Check what these commands do in bash - http://pastebin.com/kVEMStKi")
+        self.assertEqual(self.out, '', 'unset should output nothing')
 
     env_command = 'env\n'
     def test_env(self):
@@ -82,13 +76,14 @@ class TestYourShell(unittest.TestCase):
 
     cd_command = '''cd /etc
     pwd
-    echo $PWD
+    cd /var
+    pwd
     '''
     def test_cd_pwd(self):
         self.out, self.err = self.sh.communicate(self.cd_command)
         self.assert_success()
 
-        self.assertEqual(self.out, "/etc\n/etc\n", 
+        self.assertEqual(self.out, "/etc\n/var\n", 
                 "Check what these commands do in bash - http://pastebin.com/Nvq81s1s")
 
     pushd_command = '''pushd /etc
@@ -97,7 +92,7 @@ class TestYourShell(unittest.TestCase):
     pushd /bin
     popd
     popd
-    echo $PWD
+    pwd
     '''
     def test_pushd_popd(self):
         self.out, self.err = self.sh.communicate(self.pushd_command)
@@ -106,7 +101,7 @@ class TestYourShell(unittest.TestCase):
         self.assert_(self.out.endswith('/tmp\n'), 
                 "Check what these commands do in bash - http://pastebin.com/KLxARn8X")
 
-    redirect_out_command = 'ls > ls.out'
+    redirect_out_command = 'ls > ls.out\n'
     def test_redirect_out(self):
         self.out, self.err = self.sh.communicate(self.redirect_out_command)
         self.assert_success()
@@ -114,15 +109,13 @@ class TestYourShell(unittest.TestCase):
         self.assertEqual(self.out, "", "'%s' shouldn't have output" %
                 self.redirect_out_command)
 
-        try:
-            f = open('./ls.out', 'rb')
-            content = f.read()
-            self.assert_(content.find("shell_testor.py") >= 0, 
-                    "check ls.out in current directory.  It should contains output of 'ls'")
-        finally:
-            f.close()
+        f = open('./ls.out', 'rb')
+        content = f.read()
+        self.assert_(content.find("shell_testor.py") >= 0, 
+                "check ls.out in current directory.  It should contains output of 'ls'")
+        f.close()
 
-    redirect_in_command = 'wc < wc.in'
+    redirect_in_command = 'wc < wc.in\n'
     def test_redirect_in(self):
         self.crete_wc_file()
 
@@ -131,7 +124,7 @@ class TestYourShell(unittest.TestCase):
 
         self.assertEqual(self.out, " 0  3 25\n", "< symbol doesn't work")
 
-    pipe_command = 'cat ./wc.in | wc'
+    pipe_command = 'cat ./wc.in | wc\n'
     def test_pipe(self):
         self.crete_wc_file()
 
@@ -154,9 +147,13 @@ class TestYourShell(unittest.TestCase):
         self.assert_success()
 
     def assert_success(self):
-        self.assertEqual(self.sh.returncode, 0, 'Exit code of your shell is not 0')
-        self.assertEqual(self.err, '', 
-                'Error output is not empty: %s' % self.err)
+        '''
+        Do not test exit code any more.
+        '''
+        pass
+        #self.assertEqual(self.sh.returncode, 0, 'Exit code of your shell is not 0')
+        #self.assertEqual(self.err, '', 
+        #        'Error output is not empty: %s' % self.err)
 
 
 def main():
@@ -175,8 +172,18 @@ that your shell treats a command differently than bash does."""
     # Not a good way to pass sh to test case, but this is just an assignment.
     sh = sys.argv[1]
 
+    if sh != 'bash':
+        if sh.find('/') < 0 and sh.find('\\') < 0:
+            sh = os.path.join(os.getcwd(), sh)
+
+        if not os.path.exists(sh):
+            print "WARNING:"
+            print "Can not find %s anywhere, please give the relative or absolute path to your shell" \
+                % sys.argv[1]
+            return
+
     suite = unittest.TestLoader().loadTestsFromTestCase(TestYourShell)
-    unittest.TextTestRunner(verbosity=2).run(suite)
+    unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(suite)
 
 if __name__ == "__main__":
     main()
