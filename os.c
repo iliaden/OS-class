@@ -16,22 +16,22 @@
 #define MAXCMDLEN 2000
 #define MAXWORDS 128
 
-typedef int ( *FUNCTION ) ( const char * arg0, const char * args[] );
+typedef int ( *FUNCTION ) ( const char * args[] );
 
 void prompt();
 char *parse_path ( char*curr, const char * path, char* to );
 char *trim ( char *str );
 int cd ( const char * path );
-int echo_func ( const char *name, const char * args[] );
-int pwd_func ( const char *name, const char * args[] );
-int cd_func ( const char *name, const char * args[] );
-int popd_func ( const char *name, const char * args[] );
-int pushd_func ( const char *name, const char * args[] );
-int env_func ( const char *name, const char * args[] );
-int set_func ( const char *name, const char * args[] );
-int unset_func ( const char *name, const char * args[] );
-int exit_func ( const char *name, const char * args[] );
-int history_func ( const char *name, const char * args[] );
+int echo_func ( const char * args[] );
+int pwd_func ( const char * args[] );
+int cd_func ( const char * args[] );
+int popd_func ( const char * args[] );
+int pushd_func ( const char * args[] );
+int env_func ( const char * args[] );
+int set_func ( const char * args[] );
+int unset_func ( const char * args[] );
+int exit_func ( const char * args[] );
+int history_func ( const char * args[] );
 int split_str ( char * string, char ** to, int * redirections );
 int contains_equal( char ** words );
 FUNCTION find_local_func ( const char *word );
@@ -91,12 +91,12 @@ int cd ( const char * path )
     return 0;
 }
 
-int pwd_func ( const char *name, const char * args[] )
+int pwd_func ( const char * args[] )
 {
     return fprintf ( stdout, "%s\n", getenv("PWD"));
 }
 
-int echo_func ( const char *name, const char * args[] )
+int echo_func ( const char * args[] )
 {
     int options = 0;
     int escape = 0;
@@ -140,11 +140,11 @@ int echo_func ( const char *name, const char * args[] )
         printf ( "\n" );
     return 0;
 }
-int cd_func ( const char *name, const char * args[] )
+int cd_func ( const char * args[] )
 {
     return cd ( args[0] );
 }
-int popd_func ( const char *name, const char * args[] )
+int popd_func ( const char * args[] )
 {
     if ( used_dir_stack == 0 )
     {
@@ -159,7 +159,7 @@ int popd_func ( const char *name, const char * args[] )
     }
     
 }
-int pushd_func ( const char *name, const char * args[] )
+int pushd_func ( const char * args[] )
 {
     if ( used_dir_stack == 99 )
         fprintf ( stderr, "Cannot push directory onto stack: out of stack space" );
@@ -172,8 +172,8 @@ int pushd_func ( const char *name, const char * args[] )
     }
     return 0;
 }
-int env_func ( const char *name, const char * args[] )
-{ //FIXME: update unvironment
+int env_func ( const char * args[] )
+{ //FIXME: update unvironment if possible
     char ** env;
     for ( env = environment; *env != 0 ;env++)
     {
@@ -182,20 +182,20 @@ int env_func ( const char *name, const char * args[] )
     }
     return 0;
 }
-int set_func ( const char *name, const char * args[] )
+int set_func ( const char * args[] )
 {
     return putenv(strdup(args[0]));
 }
-int unset_func ( const char *name, const char * args[] )
+int unset_func ( const char * args[] )
 {
     return unsetenv( args[0] );
 }
-int exit_func ( const char *name, const char * args[] )
+int exit_func ( const char * args[] )
 {
     exit ( 0 );
     return -1;
 }
-int history_func ( const char *name, const char * args[] )
+int history_func ( const char * args[] )
 {
     FILE * hist = fopen ( hist_path, "r" );
     if ( hist != NULL )
@@ -454,7 +454,7 @@ int exec_command ( char ** words, const int *redirections )
             if ( funcptr != NULL )
             {
                 //local command, no pipes
-                int ret_code =  funcptr ( (const char * ) words[0], (const char ** )words + 1 );
+                int ret_code =  funcptr ( (const char ** )words + 1 );
                 exit( ret_code);
             }
             return execvp ( words[0], words );
@@ -464,7 +464,7 @@ int exec_command ( char ** words, const int *redirections )
             //if the command affects our current environemt, it must be executed
             funcptr = find_env_func ( words[0] );
             if ( funcptr != NULL )
-                return funcptr ( (const char *) words[0], (const char ** )words + 1 );
+                return funcptr ( (const char ** )words + 1 );
 
             //wait for child to end execution
             int status;
