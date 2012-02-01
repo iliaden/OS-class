@@ -1,1 +1,13 @@
-currently working on assignment 1... implementing a shell... with the worst possible requirement specifications
+Assignment 1: implementing a shell.  
+    Simply go into ass1, and compile with `gcc -o /path/to/executable Assignment_1_Ilia_Denotkine.c'
+    then execute with ./ass1
+
+
+    Warning: there is no prompt to
+
+    Bonus features:
+	parsing of variables
+	    echo $PWD		prints the current directory
+	    echo "$PWD"aaa	prints the current directory, appended with "aaa"
+	history stores all the commands over all the sessions
+    	
