@@ -1,3 +1,17 @@
+Assignment2:
+    basic architecture is there.
+    TODO:
+        1) implement the in_ding and out_ding, so that send_in_ding() waits for one wait_for_in_ding() to complete and return.
+        2) add the command-line parameters (floor count, verbosity)
+        3) randomize each work_time... not each worker's
+        4) bugfixes?
+
+
+
+
+
+
+
 Assignment 1: implementing a shell.  
     Simply go into ass1, and compile with `gcc -o /path/to/executable Assignment_1_Ilia_Denotkine.c'
     then execute with ./ass1
