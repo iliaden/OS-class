@@ -184,6 +184,56 @@ int get_outside(int floor) //allows one person to leave the elevator
     return 0;
 }
 
+int compute_direction(int dir, int curr_floor)
+{
+    int ii;
+    if (dir == UP)
+    {
+        //we make sure we're not at the top floor
+        if (curr_floor == floor_count)
+            return DOWN;
+        //we check that someone INSIDE the elevator wants to get higher
+        for ( ii=curr_floor+1 ; ii < floor_count; ii++)
+        {//FIXME: semaphore here?
+            if (targets[ii] > 0 )
+                return UP;
+        }
+        //we check that there are requests from above
+        for ( ii=curr_floor+1 ; ii < floor_count; ii++)
+        {//FIXME: semaphore here?
+            if (requests[UP][ii] > 0 )
+                return UP;
+            else if (requests[DOWN][ii] > 0)
+                return UP;
+        }
+        return DOWN;
+        //option to add the idea of not moving if there are no requests...
+    }
+    else if (dir == DOWN)
+    {
+        //we make sure we're not at the bottom floor
+        if (curr_floor == 0)
+            return UP;
+        //we check that someone INSIDE the elevator wants to get lower
+        for ( ii=curr_floor-1 ; ii >= 0 ; ii--)
+        {//FIXME: semaphore here?
+            if (targets[ii] > 0 )
+                return DOWN;
+        }
+        //we check that there are requests from above
+        for ( ii=curr_floor-1 ; ii >= 0 ; ii--)
+        {//FIXME: semaphore here?
+            if (requests[UP][ii] > 0 )
+                return DOWN;
+            else if (requests[DOWN][ii] > 0)
+                return DOWN;
+        }
+        return UP;
+        //option to add the idea of not moving if there are no requests...
+    }
+
+}
+
 int elevator(int max_cap)
 {
     //init?
