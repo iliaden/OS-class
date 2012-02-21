@@ -103,10 +103,9 @@ void * my_clock(void * arg)
         time_elapsed++;
 
         if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
-        {
             printf("\n\nStarting tick %d\n", time_elapsed);
+        if ( debug_lvl == MAXDEBUG )
             print_passengers();
-        }
         
         else if (debug_lvl == AGGREGATE && time_elapsed%100 == 0)
         {
@@ -215,7 +214,7 @@ void press_button(int curr_floor, int target_floor, int client_id)
     {
         pthread_mutex_lock(&requests_mutex);
             requests[UP][curr_floor]++;
-            if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+            if ( (debug_lvl == MAXDEBUG ) )//|| (debug_lvl == AVGDEBUG ) )
                 printf("Client %d pressed button UP at floor %d, hoping to get to floor %d.\n",client_id,curr_floor,target_floor);
         pthread_mutex_unlock(&requests_mutex);
     }
@@ -223,7 +222,7 @@ void press_button(int curr_floor, int target_floor, int client_id)
     {
         pthread_mutex_lock(&requests_mutex);
             requests[DOWN][curr_floor]++;
-            if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+            if ( (debug_lvl == MAXDEBUG ) )//|| (debug_lvl == AVGDEBUG ) )
                 printf("Client %d pressed button DOWN at floor %d, hoping to get to floor %d.\n",client_id,curr_floor,target_floor);
         pthread_mutex_unlock(&requests_mutex);
     }
@@ -326,18 +325,18 @@ void *elevator(void * arg)
         {
             //we move up
             curr_floor++;
-            if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+            if ( (debug_lvl == MAXDEBUG ) )//|| (debug_lvl == AVGDEBUG ) )
                 printf("elevator moved UP to floor %d\n", curr_floor);
         }
         else if (dir == DOWN)
         {   //am I forgetting something here?
             curr_floor--;
-            if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+            if ( (debug_lvl == MAXDEBUG ) )//|| (debug_lvl == AVGDEBUG ) )
                 printf("elevator moved DOWN to floor %d\n", curr_floor);
         }
         else 
         {
-            if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+            if ( (debug_lvl == MAXDEBUG ) )//|| (debug_lvl == AVGDEBUG ) )
                 printf("elevator stayed on floor %d\n", curr_floor);
             //no need to move
             continue;
