@@ -9,6 +9,7 @@
 #define WORKING 1
 #define WAITING 2
 #define INTRANSIT 3
+
 #define UP 0
 #define DOWN 1
 #define WAIT 2
@@ -40,16 +41,18 @@ int **requests; //main() must allocate the memory - [2][floor_count]
 int *targets;   // main() must allocate the memory - [floor_count]
 int passenger_count=0; //how many people are on the elevator
 int elevator_floor; //current floor where the elevator is
-int debugLvl = MAXDEBUG;
+int debug_lvl = MAXDEBUG;
 int max_work_time; //global variable that determines the maximum amount of time a worker can work
 int * passengers; //array of size passengers. 1 means passenger is on elevator; 0 means he's not
+int people_transported=0;
+int people_100 = 0;
+int clients_num;
 
 void *my_clock(void* interval); //main ticker
 void *client(void* work_len); //client thread. one for each client
 void *elevator(void* max_cap); //elevator thread
 
 int my_random(int mod); //gets a random number between 0 and mod
-int read_time(); //protected call to know the time elapsed since start of simulation
 void wait_for_tick(); //waits until the next clock tick.
 void send_out_ding(); //lets one person out. blockingg call.
 void send_in_ding(); //let one person in. blocks until mutex is released by other thread.
@@ -59,12 +62,29 @@ void press_button(int curr_floor, int target_floor, int client_id); //press the 
 int get_inside(int curr_floor, int target_floor); //allows one person to enter elevator
 int get_outside(int floor); //allows one person to leave the elevator
 int read_requests(int dir, int floor);
+void print_passengers();
 
+void print_passengers()
+{
+    int ii, start=0;
+    for (ii = 0; ii < clients_num; ii++)
+    {
+        if (!start && passengers[ii] )
+        {
+            printf ("List of passengers on board: %d",ii);
+            start=1;
+        }
+        else if ( passengers[ii] )
+            printf(", %d", ii);
+    } 
+    if (start)
+        printf(".\n");
+}
 int get_elevator_floor() //thread-safe call to know where the elevator currently is. 
 {
     int tmp;
     pthread_mutex_lock( &elevator_floor_mutex );
-    tmp = elevator_floor;
+        tmp = elevator_floor;
     pthread_mutex_unlock( &elevator_floor_mutex );
     return tmp;
 }
@@ -74,15 +94,6 @@ int my_random(int mod)
     return rand() % mod;
 }
 
-//TIME/clock - related
-int read_time()
-{
-    int tmp;
-    pthread_mutex_lock( &clock_mutex );
-    tmp = time_elapsed;
-    pthread_mutex_unlock( &clock_mutex );
-    return tmp;
-}
 void * my_clock(void * arg)
 {
     int interval = (int)arg;
@@ -91,7 +102,21 @@ void * my_clock(void * arg)
         //increment time_elapsed
         time_elapsed++;
 
-        printf("\n\nStarting tick %d\n", time_elapsed);
+        if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+        {
+            printf("\n\nStarting tick %d\n", time_elapsed);
+            print_passengers();
+        }
+        
+        else if (debug_lvl == AGGREGATE && time_elapsed%100 == 0)
+        {
+            printf("People transported in the last 100 ticks: %d\n",people_100);
+            printf("People transported since start of simulation (%d ticks): %d\n",time_elapsed, people_transported);
+            pthread_mutex_lock( &out_mutex );
+                people_100=0;
+            pthread_mutex_unlock( &out_mutex );
+        }
+            
         //send tick.
         pthread_cond_broadcast( &tick_waiter);        
         //wait 1 clock cycle
@@ -129,6 +154,7 @@ void *client(void * arg )
             {  
                 while ( target_floor == curr_floor)
                     target_floor = my_random(floor_count); //avoids going to current floor
+
                 press_button(curr_floor, target_floor,worker_id);
                 state = WAITING;                
             }
@@ -142,9 +168,9 @@ void *client(void * arg )
                 //get inside...quick!
                 //or at least try
                 if (get_inside(curr_floor, target_floor) == 0 ) //operation succeeded. and that is a blocking operation through mutex
-    i/FIXME: release semaphore
                 {
-                    printf("Client %d enetered the elevator at floor %d heading toward floor %d\n",worker_id,curr_floor,target_floor);
+                    if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+                        printf("Client %d enetered the elevator at floor %d heading toward floor %d\n",worker_id,curr_floor,target_floor); 
                     passengers[worker_id] = 1;
                     state = INTRANSIT;
                 }
@@ -157,7 +183,8 @@ void *client(void * arg )
             if (curr_floor == target_floor)
             {
                 get_outside(target_floor);
-                printf("Client %d left the elevator at floor %d and will now work for %d ticks.\n",worker_id,curr_floor,work_len);
+                if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+                    printf("Client %d left the elevator at floor %d and will now work for %d ticks.\n",worker_id,curr_floor,work_len);
                 passengers[worker_id] = 0;
                 state=WORKING;
                 worked_time = 0;
@@ -177,7 +204,7 @@ int read_requests(int dir, int floor)
 {
     int tmp;
     pthread_mutex_lock(&requests_mutex);
-    tmp = requests[dir][floor];
+        tmp = requests[dir][floor];
     pthread_mutex_unlock(&requests_mutex);
     return tmp;
 }
@@ -187,15 +214,17 @@ void press_button(int curr_floor, int target_floor, int client_id)
     if (curr_floor < target_floor) 
     {
         pthread_mutex_lock(&requests_mutex);
-        requests[UP][curr_floor]++;
-        printf("Client %d pressed button UP at floor %d, hoping to get to floor %d.\n",client_id,curr_floor,target_floor);
+            requests[UP][curr_floor]++;
+            if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+                printf("Client %d pressed button UP at floor %d, hoping to get to floor %d.\n",client_id,curr_floor,target_floor);
         pthread_mutex_unlock(&requests_mutex);
     }
     else
     {
         pthread_mutex_lock(&requests_mutex);
-        requests[DOWN][curr_floor]++;
-        printf("Client %d pressed button DOWN at floor %d, hoping to get to floor %d.\n",client_id,curr_floor,target_floor);
+            requests[DOWN][curr_floor]++;
+            if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+                printf("Client %d pressed button DOWN at floor %d, hoping to get to floor %d.\n",client_id,curr_floor,target_floor);
         pthread_mutex_unlock(&requests_mutex);
     }
 }
@@ -205,13 +234,13 @@ int get_inside(int curr_floor, int target_floor)
     if (curr_floor < target_floor) 
     {
         pthread_mutex_lock(&requests_mutex);
-        requests[UP][curr_floor]--;
+            requests[UP][curr_floor]--;
         pthread_mutex_unlock(&requests_mutex);
     }
     else
     {
         pthread_mutex_lock(&requests_mutex);
-        requests[DOWN][curr_floor]--;
+            requests[DOWN][curr_floor]--;
         pthread_mutex_unlock(&requests_mutex);
     }
     targets[target_floor]++;
@@ -223,8 +252,10 @@ int get_inside(int curr_floor, int target_floor)
 int get_outside(int floor) //allows one person to leave the elevator
 {
     pthread_mutex_lock( &out_mutex );
-    passenger_count--;
-    targets[floor]--;
+        passenger_count--;
+        targets[floor]--;
+        people_transported++;
+        people_100++;
     pthread_mutex_unlock( &out_mutex );
     return 0;
 }
@@ -251,9 +282,7 @@ int compute_direction(int dir, int curr_floor)
         for ( ii=curr_floor+1 ; ii < floor_count; ii++)
         {
             if ( (read_requests(UP, ii) > 0 ) || read_requests(DOWN,ii) > 0 )
-            {
                 return UP;
-            }
         }
         return DOWN;
         //option to add the idea of not moving if there are no requests...
@@ -273,9 +302,7 @@ int compute_direction(int dir, int curr_floor)
         for ( ii=curr_floor-1 ; ii >= 0 ; ii--)
         {
             if ( (read_requests(UP, ii) > 0 ) || read_requests(DOWN,ii) > 0 )
-            {
                 return DOWN;
-            }
         }
         return UP;
         //option to add the idea of not moving if there are no requests...
@@ -298,15 +325,20 @@ void *elevator(void * arg)
         if ( dir == UP)
         {
             //we move up
-            printf("elevator moved UP to floor %d\n", ++curr_floor);
+            curr_floor++;
+            if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+                printf("elevator moved UP to floor %d\n", curr_floor);
         }
         else if (dir == DOWN)
         {   //am I forgetting something here?
-            printf("elevator moved DOWN to floor %d\n", --curr_floor);
+            curr_floor--;
+            if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+                printf("elevator moved DOWN to floor %d\n", curr_floor);
         }
         else 
         {
-            printf("elevator stayed on floor %d\n", curr_floor);
+            if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+                printf("elevator stayed on floor %d\n", curr_floor);
             //no need to move
             continue;
         }
@@ -357,16 +389,15 @@ int main(int argc, char * argv[])
     //init
     srand (time(NULL)); //should be done once... to be fixed eventually
     time_elapsed=0;
-    int clients_num=50;
+    clients_num=50;
     int max_capacity = 2147483647;
-    int tick_interval = 10000;
+    int tick_interval = 1000;
     max_work_time=30;
     int ii; 
     floor_count=50;
     elevator_floor=0;
 
     //parse input
-    //
     //format:   -n number of floors
     //          -p number of people
     //          -m max_capacity
@@ -378,14 +409,14 @@ int main(int argc, char * argv[])
     for ( ii = 1; ii < argc; ii++)
     {
         if ( strcmp(argv[ii], "-v" ) == 0 )
-            debugLvl = AGGREGATE;    
+            debug_lvl = AGGREGATE;    
         else if ( strcmp(argv[ii], "-vv" ) == 0 )
-            debugLvl = AVGDEBUG;    
+            debug_lvl = AVGDEBUG;    
         else if ( strcmp(argv[ii], "-vvv" ) == 0 )
-            debugLvl = MAXDEBUG;    
-        else if ( (strcmp(argv[ii],"-h" ) == 0 ) || (strcmp(argv[ii],"--help" )) )
+            debug_lvl = MAXDEBUG;    
+        else if ( (strcmp(argv[ii],"-h" ) == 0 ) || (strcmp(argv[ii],"--help" ) ==  0) )
         {
-            printf("usage: PROGNAME \n\t-n number of floors [default 50]\n\t-p number of people [default 5]\n\t-m max capacity [default 2147483647]\n\t-t number of milliseconds per tick [default 1000]\n\t-w maximum amount of time a worker will be working on his task (in ticks) [default 50]\n\t-v [prints 100-tick aggregation data]\n\t-vv [prints only who enters and leaves each tick]\n\t-vvv [prints ALL the events that occur per tick] [default]\n\t-h or --help [prints this message]\n");
+            printf("usage: PROGNAME \n\t-n number of floors [default %d]\n\t-p number of people [default %d]\n\t-m max capacity [default %d]\n\t-t number of milliseconds per tick [default %d]\n\t-w maximum amount of time a worker will be working on his task (in ticks) [default %d]\n\t-v [prints 100-tick aggregation data]\n\t-vv [prints only who enters and leaves each tick]\n\t-vvv [prints ALL the events that occur per tick] [default]\n\t-h or --help [prints this message]\n", floor_count, clients_num, max_capacity, tick_interval/1000, max_work_time);
             exit(0);
         }
         else if ( strcmp(argv[ii], "-p" ) == 0 )
@@ -395,7 +426,7 @@ int main(int argc, char * argv[])
                 printf("please specify the number of people present");
                 exit (-1);
             }
-            max_capacity = atoi(argv[++ii]);
+            clients_num = atoi(argv[++ii]);
         } 
         else if ( strcmp(argv[ii], "-n" ) == 0 )
         {
@@ -404,7 +435,7 @@ int main(int argc, char * argv[])
                 printf("please specify the number of floors in the building");
                 exit (-1);
             }
-            clients_num = atoi(argv[++ii]);
+            floor_count = atoi(argv[++ii]);
         } 
         else if ( strcmp(argv[ii], "-m" ) == 0 )
         {
@@ -422,7 +453,7 @@ int main(int argc, char * argv[])
                 printf("please specify the maximum amount of time a worker can work before changing floors");
                 exit (-1);
             }
-            max_work_time = 1000*atoi(argv[++ii]);
+            max_work_time = atoi(argv[++ii]);
         } 
         else if ( strcmp(argv[ii], "-t" ) == 0 )
         {
