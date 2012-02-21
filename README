@@ -1,10 +1,71 @@
+Ilia Denotkine
+260375925
+
 Assignment2:
-    basic architecture is there.
-    TODO:
-        1) implement the in_ding and out_ding, so that send_in_ding() waits for one wait_for_in_ding() to complete and return.
-        2) add the command-line parameters (floor count, verbosity)
-        3) randomize each work_time... not each worker's
-        4) bugfixes?
+    compile with `gcc -o /path/to/executable Assignment_2_Ilia_Denotkine.c -lpthread'
+    execute with /path/to/executable
+
+    usage: PROGNAME 
+        -n number of floors [default 50]
+        -p number of people [default 50]
+        -m max capacity [default 2147483647]
+        -t number of milliseconds per tick [default 1]
+        -w maximum amount of time a worker will be working on his task (in ticks) [default 30]
+        -v [prints 100-tick aggregation data]
+        -vv [prints only who enters and leaves each tick]
+        -vvv [prints ALL the events that occur per tick] [default]
+        -h or --help [prints this message]
+
+    notes: the LAST of the [-v,-vv,-vvv] commands is considered. so' -v -vvv -vv'  is interpreted as '-vv'
+            -t specifies the amount of REAL time that happens between ticks.
+            ONLY integers are accepted as parameters of the flags.
+            each worker always works random amounts of time, between 1 tick and the amount of ticks specified by -w
+            If there is nowhere to go, the elevator will oscillate between 2 adjacent floors.
+
+Sample output:
+    /path/to/exec -n 25 -p 15 -m 5 -w 15 -vvv
+    
+    output (from the execution of this program for about 5 seconds):
+        located in the file `ass2/sample_output.txt'
+
+    
+    /path/to/exec -n 50 -p 100 -m 5 -w 50 -v
+
+    People transported in the last 100 ticks: 13
+    People transported since start of simulation (100 ticks): 13
+    People transported in the last 100 ticks: 16
+    People transported since start of simulation (200 ticks): 29
+    People transported in the last 100 ticks: 19
+    People transported since start of simulation (300 ticks): 48
+    People transported in the last 100 ticks: 17
+    People transported since start of simulation (400 ticks): 65
+    People transported in the last 100 ticks: 13
+    People transported since start of simulation (500 ticks): 78
+    People transported in the last 100 ticks: 19
+    People transported since start of simulation (600 ticks): 97
+    People transported in the last 100 ticks: 17
+    People transported since start of simulation (700 ticks): 114
+    People transported in the last 100 ticks: 18
+    People transported since start of simulation (800 ticks): 132
+    People transported in the last 100 ticks: 19
+    People transported since start of simulation (900 ticks): 151
+    People transported in the last 100 ticks: 15
+    People transported since start of simulation (1000 ticks): 166
+    People transported in the last 100 ticks: 13
+    People transported since start of simulation (1100 ticks): 179
+    People transported in the last 100 ticks: 17
+    People transported since start of simulation (1200 ticks): 196
+    People transported in the last 100 ticks: 14
+    People transported since start of simulation (1300 ticks): 210
+    People transported in the last 100 ticks: 16
+    People transported since start of simulation (1400 ticks): 226
+    People transported in the last 100 ticks: 13
+    People transported since start of simulation (1500 ticks): 239
+    People transported in the last 100 ticks: 15
+    People transported since start of simulation (1600 ticks): 254
+    People transported in the last 100 ticks: 16
+    People transported since start of simulation (1700 ticks): 270
+
 
 
 
@@ -14,7 +75,7 @@ Assignment2:
 
 Assignment 1: implementing a shell.  
     Simply go into ass1, and compile with `gcc -o /path/to/executable Assignment_1_Ilia_Denotkine.c'
-    then execute with ./ass1
+    then execute with /path/to/executable
 
 
     Warning: there is no prompt to
