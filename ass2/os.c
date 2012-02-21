@@ -34,39 +34,43 @@ pthread_cond_t tick_waiter = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t tick_mutex = PTHREAD_MUTEX_INITIALIZER; 
 
 
-
+//global static params (unchanged after init
+int clients_num; //number of clients in the system
 int time_elapsed; //main() initializes to 0. everyone can read. clock can write.
 int floor_count; //main() reads this from command-line args
-int **requests; //main() must allocate the memory - [2][floor_count]
-int *targets;   // main() must allocate the memory - [floor_count]
+int max_work_time; //global variable that determines the maximum amount of time a worker can work
+int max_capacity; //global variable indicating max numbeer of people that can be in the elevator any any given moment
+int debug_lvl = MAXDEBUG;
+
+//changing global variables
 int passenger_count=0; //how many people are on the elevator
 int elevator_floor; //current floor where the elevator is
-int debug_lvl = MAXDEBUG;
-int max_work_time; //global variable that determines the maximum amount of time a worker can work
-int * passengers; //array of size passengers. 1 means passenger is on elevator; 0 means he's not
-int people_transported=0;
-int people_100 = 0;
-int clients_num;
+int people_transported=0; //total number of passengers transported since start of simulation
+int people_100 = 0; //number of passengers transported in the past 100 ticks.
+int *targets;   // main() must allocate the memory - [floor_count]
+int *passengers; //array of size passengers. 1 means passenger is on elevator; 0 means he's not
+int **requests; //main() must allocate the memory - [2][floor_count]
 
+//threads
 void *my_clock(void* interval); //main ticker
 void *client(void* work_len); //client thread. one for each client
 void *elevator(void* max_cap); //elevator thread
 
 int my_random(int mod); //gets a random number between 0 and mod
 void wait_for_tick(); //waits until the next clock tick.
-void send_out_ding(); //lets one person out. blockingg call.
+void send_out_ding(); //lets one person out. blocking call.
 void send_in_ding(); //let one person in. blocks until mutex is released by other thread.
-void wait_for_out_ding(); //blocking call
-void wait_for_in_ding();  //blocking call
+void wait_for_out_ding(); //waits until the elevator allows one person to exit; attempts to grab semaphore
+int wait_for_in_ding(int curr_floor, int target_floor, int worker_id);  //waits until the elevator allows one person to enter; attempts to grab semaphore
 void press_button(int curr_floor, int target_floor, int client_id); //press the right button (up/down)
-int get_inside(int curr_floor, int target_floor); //allows one person to enter elevator
-int get_outside(int floor); //allows one person to leave the elevator
-int read_requests(int dir, int floor);
-void print_passengers();
+int get_inside(int curr_floor, int target_floor); //person enters elevator
+int get_outside(int floor); //person exits elevator
+int read_requests(int dir, int floor); //tells if there are any requests to go in direction DIR from floor FLOOR.
+void print_passengers(); //prints the list of passengers who are on board the elevator; if it is empty, does nothing
 
-void print_passengers()
+void print_passengers() //print passengers who are on plane
 {
-    int ii, start=0;
+    int ii, start=0; //start means that there was at least one passenger found on elevator.
     for (ii = 0; ii < clients_num; ii++)
     {
         if (!start && passengers[ii] )
@@ -80,6 +84,7 @@ void print_passengers()
     if (start)
         printf(".\n");
 }
+
 int get_elevator_floor() //thread-safe call to know where the elevator currently is. 
 {
     int tmp;
@@ -89,12 +94,18 @@ int get_elevator_floor() //thread-safe call to know where the elevator currently
     return tmp;
 }
 
-int my_random(int mod)
+int my_random(int mod) //returns a random value between 0 and mod.  
 {
     return rand() % mod;
 }
 
-void * my_clock(void * arg)
+/*  clock thread. every INTERVAL (passed as argument), it does the following:
+ *  1) counts the amount of ticks elapsed since the start of the simulation.
+ *  2) if needed, prints current tick count, and the list of passengers on board. If needed, prints the aggregated info.
+ *  3) notifies everyone of a time tick
+ *  4) sleeps for INTERVAL, then repeats this.
+ * */
+void * my_clock(void * arg) 
 {
     int interval = (int)arg;
     while(1)
@@ -122,34 +133,47 @@ void * my_clock(void * arg)
         usleep(interval);
     }
 }
-void wait_for_tick() //waits until the next clock tick.
+
+void wait_for_tick() //waits until the next clock tick. blocking call.
 {
     pthread_cond_wait( &tick_waiter, &tick_mutex);
     pthread_mutex_unlock(&tick_mutex);
 }
 
-//CLIENT - related
-
+/*  Client thread.
+ *  At every tick:
+ *      if client is working:
+ *          work.
+ *          if work shift is over, do:
+ *              compute new floor where he wants to go.
+ *              pust appropriate button
+ *      if client is waiting for elevator:
+ *          if the elevator is at his floor, and allows people inside:
+ *              try to get in (done via mutex; only one person allowed to enter at a single time - necessary for max passenger count constraint)
+ *      if client is inside elevator:
+ *          if elevator is at the target floor, and it is letting people out:
+ *              try to leave the elevator (again, mutex needed to keep passenger count stable)
+ *  */
 void *client(void * arg )
 {
-    int work_len = 1+my_random(max_work_time-1);
-    int worker_id = (int)arg;
     //init
-    int state = WORKING;
-    int worked_time = my_random(work_len); 
-    int target_floor = my_random(floor_count);
+    int work_len = 1+my_random(max_work_time-1); //how long this client must work for until changing floors.
+    int worker_id = (int)arg; //client's ID. must be unique, and the count must start at 0.
+    int state = WORKING; //client's state. everyone starts WORKING so that they don't all rush at the same time.
+    int worked_time = my_random(work_len); //amount of time elapsed since start of work 
+    int target_floor = my_random(floor_count); //where this clients wants to go
     int curr_floor = my_random(floor_count); // we start at a random floor
 
     //main loop
     while(1)
     {
         //this line ensures all the operations happen only once per tick.
-        wait_for_tick(); //must be a blocking call.
+        wait_for_tick(); 
 
         if (state == WORKING)
         {
             worked_time++;
-            if ( worked_time > work_len ) //TODO: verify the necessity of an equality constraint here.
+            if ( worked_time > work_len ) 
             {  
                 while ( target_floor == curr_floor)
                     target_floor = my_random(floor_count); //avoids going to current floor
@@ -160,20 +184,21 @@ void *client(void * arg )
         }
         else if ( state == WAITING)
         {
-            wait_for_in_ding(); // a single in ding happens at each clock cycle
+            if ( wait_for_in_ding(curr_floor, target_floor, worker_id) == 0) //operation succeeded
+                state = INTRANSIT;
+            pthread_mutex_unlock(&in_ding_mutex);
+            /*  if there are many clients waiting for dings:
+             *      if this client responds to the ding
+             *          if the elevator it at the right spot- perfect, we enter.
+             *      otherwise
+             *          this client sees the elevator is at the wrong floor
+             *          he does nothing
+             *          loop goes to wait_for_tick (this client won't do anything else this tick)
+             *          elevator sends another ding because there are still requests to enter and space available
+             *
+             *  this solves many problems with synchronization or getting stuck in infinite loops.
+             */
             
-            if ( get_elevator_floor() == curr_floor )
-            {
-                //get inside...quick!
-                //or at least try
-                if (get_inside(curr_floor, target_floor) == 0 ) //operation succeeded. and that is a blocking operation through mutex
-                {
-                    if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
-                        printf("Client %d enetered the elevator at floor %d heading toward floor %d\n",worker_id,curr_floor,target_floor); 
-                    passengers[worker_id] = 1;
-                    state = INTRANSIT;
-                }
-            }
         }
         else if ( state == INTRANSIT)
         {
@@ -199,6 +224,7 @@ void *client(void * arg )
     return NULL;
 }
 
+//function that returns the number of requests in a given direction from a given floor in a thread-safe manner.
 int read_requests(int dir, int floor)
 {
     int tmp;
@@ -208,6 +234,8 @@ int read_requests(int dir, int floor)
     return tmp;
 }
 
+//generates a request for the elevator from a given floor and in an appropriate direction.
+//It also prints logs at the most detailed level.
 void press_button(int curr_floor, int target_floor, int client_id)
 {
     if (curr_floor < target_floor) 
@@ -228,23 +256,28 @@ void press_button(int curr_floor, int target_floor, int client_id)
     }
 }
 
+//function that allows for one person to enter the elevator. It also updates all the necessary global variables.
 int get_inside(int curr_floor, int target_floor) 
 {
-    if (curr_floor < target_floor) 
+    if ( passenger_count < max_capacity)
     {
-        pthread_mutex_lock(&requests_mutex);
-            requests[UP][curr_floor]--;
-        pthread_mutex_unlock(&requests_mutex);
+        if (curr_floor < target_floor) 
+        {
+            pthread_mutex_lock(&requests_mutex);
+                requests[UP][curr_floor]--;
+            pthread_mutex_unlock(&requests_mutex);
+        }
+        else
+        {
+            pthread_mutex_lock(&requests_mutex);
+                requests[DOWN][curr_floor]--;
+            pthread_mutex_unlock(&requests_mutex);
+        }
+        targets[target_floor]++;
+        passenger_count++;
+        return 0;
     }
-    else
-    {
-        pthread_mutex_lock(&requests_mutex);
-            requests[DOWN][curr_floor]--;
-        pthread_mutex_unlock(&requests_mutex);
-    }
-    targets[target_floor]++;
-    passenger_count++;
-    return 0;
+    return -1;
 }
 
 
@@ -311,14 +344,12 @@ int compute_direction(int dir, int curr_floor)
 
 void *elevator(void * arg)
 {
-    int max_capacity = (int)arg;
     //init?
     int dir = UP;    
     int curr_floor = 0;
 
     while(1)
     {
-        
         wait_for_tick(); //everything starts with a tick from the clock
         dir = compute_direction(dir, curr_floor); //where we need to go, given curr dir & floor
         if ( dir == UP)
@@ -348,15 +379,11 @@ void *elevator(void * arg)
         
         //let passengers out
         while (targets[curr_floor] > 0 )
-        {
             send_out_ding();
-        }
 
         //let passengers in
         while ( ((read_requests(dir, curr_floor) > 0) || ((read_requests(1-dir, 0) > 0) && curr_floor==0) || ((read_requests(1-dir, floor_count-1) > 0) && curr_floor==floor_count-1) ) && passenger_count < max_capacity )
-        {
             send_in_ding();            
-        }
     }
 }
 
@@ -376,11 +403,23 @@ void send_in_ding() //lets one person in. blocking call.
     pthread_cond_signal(&in_ding_waiter);
     pthread_mutex_unlock(&in_ding_mutex);
 }
-void wait_for_in_ding() //blocking call
+int wait_for_in_ding(int curr_floor, int target_floor, int worker_id) //blocking call
 {
     pthread_mutex_lock(&in_ding_mutex);    
     pthread_cond_wait(&in_ding_waiter, &in_ding_mutex);
-    pthread_mutex_unlock(&in_ding_mutex);
+    if ( get_elevator_floor() == curr_floor ) //this following operations must be atomic, and thread-safe.
+    {
+        //get inside...quick!
+        //or at least try
+        if (get_inside(curr_floor, target_floor) == 0 ) //operation succeeded. and that is a blocking operation through mutex
+        {
+            if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
+                printf("Client %d entered the elevator at floor %d heading toward floor %d\n",worker_id,curr_floor,target_floor); 
+            passengers[worker_id] = 1;
+            return 0;
+        }
+    }
+    return 1;
 }
 
 int main(int argc, char * argv[])
@@ -389,7 +428,7 @@ int main(int argc, char * argv[])
     srand (time(NULL)); //should be done once... to be fixed eventually
     time_elapsed=0;
     clients_num=50;
-    int max_capacity = 2147483647;
+    max_capacity = 2147483647;
     int tick_interval = 1000;
     max_work_time=30;
     int ii; 
