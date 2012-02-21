@@ -11,6 +11,7 @@
 #define INTRANSIT 3
 #define UP 0
 #define DOWN 1
+#define WAIT 2
 
 #define MAXDEBUG 0
 #define AVGDEBUG 1
@@ -21,6 +22,7 @@ pthread_mutex_t out_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t in_ding_mutex = PTHREAD_MUTEX_INITIALIZER; 
 pthread_mutex_t out_ding_mutex = PTHREAD_MUTEX_INITIALIZER; 
 pthread_mutex_t elevator_floor_mutex = PTHREAD_MUTEX_INITIALIZER; 
+pthread_mutex_t requests_mutex = PTHREAD_MUTEX_INITIALIZER; 
 
 pthread_cond_t in_ding_waiter = PTHREAD_COND_INITIALIZER;
 pthread_cond_t out_ding_waiter = PTHREAD_COND_INITIALIZER;
@@ -36,10 +38,11 @@ int time_elapsed; //main() initializes to 0. everyone can read. clock can write.
 int floor_count; //main() reads this from command-line args
 int **requests; //main() must allocate the memory - [2][floor_count]
 int *targets;   // main() must allocate the memory - [floor_count]
-int passenger_count=0;
-int elevator_floor;
+int passenger_count=0; //how many people are on the elevator
+int elevator_floor; //current floor where the elevator is
 int debugLvl = MAXDEBUG;
-int max_work_time;
+int max_work_time; //global variable that determines the maximum amount of time a worker can work
+int * passengers; //array of size passengers. 1 means passenger is on elevator; 0 means he's not
 
 void *my_clock(void* interval); //main ticker
 void *client(void* work_len); //client thread. one for each client
@@ -55,8 +58,9 @@ void wait_for_in_ding();  //blocking call
 void press_button(int curr_floor, int target_floor, int client_id); //press the right button (up/down)
 int get_inside(int curr_floor, int target_floor); //allows one person to enter elevator
 int get_outside(int floor); //allows one person to leave the elevator
+int read_requests(int dir, int floor);
 
-int get_elevator_floor()
+int get_elevator_floor() //thread-safe call to know where the elevator currently is. 
 {
     int tmp;
     pthread_mutex_lock( &elevator_floor_mutex );
@@ -73,11 +77,11 @@ int my_random(int mod)
 //TIME/clock - related
 int read_time()
 {
-/*    int tmp;
+    int tmp;
     pthread_mutex_lock( &clock_mutex );
     tmp = time_elapsed;
     pthread_mutex_unlock( &clock_mutex );
-*/    return time_elapsed;
+    return tmp;
 }
 void * my_clock(void * arg)
 {
@@ -138,8 +142,10 @@ void *client(void * arg )
                 //get inside...quick!
                 //or at least try
                 if (get_inside(curr_floor, target_floor) == 0 ) //operation succeeded. and that is a blocking operation through mutex
+    i/FIXME: release semaphore
                 {
                     printf("Client %d enetered the elevator at floor %d heading toward floor %d\n",worker_id,curr_floor,target_floor);
+                    passengers[worker_id] = 1;
                     state = INTRANSIT;
                 }
             }
@@ -151,7 +157,8 @@ void *client(void * arg )
             if (curr_floor == target_floor)
             {
                 get_outside(target_floor);
-                printf("Client %d left the elevator at floor %d and will now word for %d ticks.\n",worker_id,curr_floor,work_len);
+                printf("Client %d left the elevator at floor %d and will now work for %d ticks.\n",worker_id,curr_floor,work_len);
+                passengers[worker_id] = 0;
                 state=WORKING;
                 worked_time = 0;
                 work_len = 1+my_random(max_work_time-1);
@@ -166,34 +173,49 @@ void *client(void * arg )
     return NULL;
 }
 
+int read_requests(int dir, int floor)
+{
+    int tmp;
+    pthread_mutex_lock(&requests_mutex);
+    tmp = requests[dir][floor];
+    pthread_mutex_unlock(&requests_mutex);
+    return tmp;
+}
+
 void press_button(int curr_floor, int target_floor, int client_id)
 {
-    if (curr_floor < target_floor) //FIXME: protected code
+    if (curr_floor < target_floor) 
     {
+        pthread_mutex_lock(&requests_mutex);
         requests[UP][curr_floor]++;
         printf("Client %d pressed button UP at floor %d, hoping to get to floor %d.\n",client_id,curr_floor,target_floor);
+        pthread_mutex_unlock(&requests_mutex);
     }
     else
     {
+        pthread_mutex_lock(&requests_mutex);
         requests[DOWN][curr_floor]++;
         printf("Client %d pressed button DOWN at floor %d, hoping to get to floor %d.\n",client_id,curr_floor,target_floor);
+        pthread_mutex_unlock(&requests_mutex);
     }
-    //release semaphore
 }
 
 int get_inside(int curr_floor, int target_floor) 
 {
-    if (curr_floor < target_floor) //FIXME: protected code
+    if (curr_floor < target_floor) 
     {
+        pthread_mutex_lock(&requests_mutex);
         requests[UP][curr_floor]--;
+        pthread_mutex_unlock(&requests_mutex);
     }
     else
     {
+        pthread_mutex_lock(&requests_mutex);
         requests[DOWN][curr_floor]--;
+        pthread_mutex_unlock(&requests_mutex);
     }
     targets[target_floor]++;
     passenger_count++;
-    //FIXME: release semaphore
     return 0;
 }
 
@@ -227,11 +249,11 @@ int compute_direction(int dir, int curr_floor)
         }
         //we check that there are requests from above
         for ( ii=curr_floor+1 ; ii < floor_count; ii++)
-        {//semaphore here?
-            if (requests[UP][ii] > 0 )
+        {
+            if ( (read_requests(UP, ii) > 0 ) || read_requests(DOWN,ii) > 0 )
+            {
                 return UP;
-            else if (requests[DOWN][ii] > 0)
-                return UP;
+            }
         }
         return DOWN;
         //option to add the idea of not moving if there are no requests...
@@ -249,11 +271,11 @@ int compute_direction(int dir, int curr_floor)
         }
         //we check that there are requests from above
         for ( ii=curr_floor-1 ; ii >= 0 ; ii--)
-        {//semaphore here?
-            if (requests[UP][ii] > 0 )
+        {
+            if ( (read_requests(UP, ii) > 0 ) || read_requests(DOWN,ii) > 0 )
+            {
                 return DOWN;
-            else if (requests[DOWN][ii] > 0)
-                return DOWN;
+            }
         }
         return UP;
         //option to add the idea of not moving if there are no requests...
@@ -284,6 +306,7 @@ void *elevator(void * arg)
         }
         else 
         {
+            printf("elevator stayed on floor %d\n", curr_floor);
             //no need to move
             continue;
         }
@@ -299,7 +322,7 @@ void *elevator(void * arg)
         }
 
         //let passengers in
-        while ( ((requests[dir/*0=up*/][curr_floor] > 0) || ((requests[1-dir][0] > 0) && curr_floor==0) || ((requests[1-dir][floor_count] > 0) && curr_floor==floor_count) ) && passenger_count < max_capacity )
+        while ( ((read_requests(dir, curr_floor) > 0) || ((read_requests(1-dir, 0) > 0) && curr_floor==0) || ((read_requests(1-dir, floor_count-1) > 0) && curr_floor==floor_count-1) ) && passenger_count < max_capacity )
         {
             send_in_ding();            
         }
@@ -336,7 +359,7 @@ int main(int argc, char * argv[])
     time_elapsed=0;
     int clients_num=50;
     int max_capacity = 2147483647;
-    int tick_interval = 100000;
+    int tick_interval = 10000;
     max_work_time=30;
     int ii; 
     floor_count=50;
@@ -381,7 +404,7 @@ int main(int argc, char * argv[])
                 printf("please specify the number of floors in the building");
                 exit (-1);
             }
-            floor_count = atoi(argv[++ii]);
+            clients_num = atoi(argv[++ii]);
         } 
         else if ( strcmp(argv[ii], "-m" ) == 0 )
         {
@@ -416,6 +439,7 @@ int main(int argc, char * argv[])
     requests[0] = (int *)malloc(sizeof(int)*floor_count);
     requests[1] = (int *)malloc(sizeof(int)*floor_count);
     targets = (int *) malloc(sizeof(int)*floor_count);   // main() must allocate the memory - [floor_count]
+    passengers = (int *) malloc(sizeof(int) * clients_num);
     for (ii=0 ; ii < floor_count ; ii++)
     {
         requests[UP][ii]=0;
@@ -435,6 +459,7 @@ int main(int argc, char * argv[])
     int rc;
     for (ii = 0; ii < clients_num;ii++)
     {
+        passengers[ii]=0; //initializing the variable here to save an extra loop
         rc = pthread_create(&clients_threads[ii], NULL, &client, (void*)ii); //or is it just 'client'?
         if (rc){
             printf("ERROR; return code from pthread_create() is %d\n", rc);
