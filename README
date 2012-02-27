@@ -20,7 +20,9 @@ Assignment2:
             -t specifies the amount of REAL time that happens between ticks.
             ONLY integers are accepted as parameters of the flags.
             each worker always works random amounts of time, between 1 tick and the amount of ticks specified by -w
-            If there is nowhere to go, the elevator will oscillate between 2 adjacent floors.
+            If there is nowhere to go, the elevator will not move.
+            Passengers enter the elevator only when necessary
+                ex: a passenger will NOT enter an elevator that carries passengers upwards if he (the passenger) needs to go downwards.
 
 Sample output:
     /path/to/exec -n 25 -p 15 -m 5 -w 15 -vvv
@@ -31,40 +33,27 @@ Sample output:
     
     /path/to/exec -n 50 -p 100 -m 5 -w 50 -v
 
-    People transported in the last 100 ticks: 13
-    People transported since start of simulation (100 ticks): 13
-    People transported in the last 100 ticks: 16
-    People transported since start of simulation (200 ticks): 29
-    People transported in the last 100 ticks: 19
-    People transported since start of simulation (300 ticks): 48
-    People transported in the last 100 ticks: 17
-    People transported since start of simulation (400 ticks): 65
-    People transported in the last 100 ticks: 13
-    People transported since start of simulation (500 ticks): 78
-    People transported in the last 100 ticks: 19
-    People transported since start of simulation (600 ticks): 97
-    People transported in the last 100 ticks: 17
-    People transported since start of simulation (700 ticks): 114
-    People transported in the last 100 ticks: 18
-    People transported since start of simulation (800 ticks): 132
-    People transported in the last 100 ticks: 19
-    People transported since start of simulation (900 ticks): 151
-    People transported in the last 100 ticks: 15
-    People transported since start of simulation (1000 ticks): 166
-    People transported in the last 100 ticks: 13
-    People transported since start of simulation (1100 ticks): 179
-    People transported in the last 100 ticks: 17
-    People transported since start of simulation (1200 ticks): 196
-    People transported in the last 100 ticks: 14
-    People transported since start of simulation (1300 ticks): 210
-    People transported in the last 100 ticks: 16
-    People transported since start of simulation (1400 ticks): 226
-    People transported in the last 100 ticks: 13
-    People transported since start of simulation (1500 ticks): 239
-    People transported in the last 100 ticks: 15
-    People transported since start of simulation (1600 ticks): 254
-    People transported in the last 100 ticks: 16
-    People transported since start of simulation (1700 ticks): 270
+People transported in the last 100 ticks: 18.
+People transported since start of simulation (100 ticks): 18.
+People transported in the last 100 ticks: 14.
+People transported since start of simulation (200 ticks): 32.
+People transported in the last 100 ticks: 22.
+People transported since start of simulation (300 ticks): 54.
+People transported in the last 100 ticks: 17.
+People transported since start of simulation (400 ticks): 71.
+People transported in the last 100 ticks: 17.
+People transported since start of simulation (500 ticks): 88.
+People transported in the last 100 ticks: 18.
+People transported since start of simulation (600 ticks): 106.
+People transported in the last 100 ticks: 13.
+People transported since start of simulation (700 ticks): 119.
+People transported in the last 100 ticks: 20.
+People transported since start of simulation (800 ticks): 139.
+People transported in the last 100 ticks: 18.
+People transported since start of simulation (900 ticks): 157.
+People transported in the last 100 ticks: 15.
+People transported since start of simulation (1000 ticks): 172.
+
 
 
 
