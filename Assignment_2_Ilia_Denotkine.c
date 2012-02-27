@@ -47,6 +47,7 @@ int passenger_count=0; //how many people are on the elevator
 int elevator_floor; //current floor where the elevator is
 int people_transported=0; //total number of passengers transported since start of simulation
 int people_100 = 0; //number of passengers transported in the past 100 ticks.
+int elevator_direction; //global info about the elevator's current heading
 int *targets;   // main() must allocate the memory - [floor_count]
 int *passengers; //array of size passengers. 1 means passenger is on elevator; 0 means he's not
 int **requests; //main() must allocate the memory - [2][floor_count]
@@ -114,14 +115,14 @@ void * my_clock(void * arg)
         time_elapsed++;
 
         if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
-            printf("\n\nStarting tick %d\n", time_elapsed);
+            printf("\n\nStarting tick %d.\n", time_elapsed);
         if ( debug_lvl == MAXDEBUG )
             print_passengers();
         
         else if (debug_lvl == AGGREGATE && time_elapsed%100 == 0)
         {
-            printf("People transported in the last 100 ticks: %d\n",people_100);
-            printf("People transported since start of simulation (%d ticks): %d\n",time_elapsed, people_transported);
+            printf("People transported in the last 100 ticks: %d.\n",people_100);
+            printf("People transported since start of simulation (%d ticks): %d.\n",time_elapsed, people_transported);
             pthread_mutex_lock( &out_mutex );
                 people_100=0;
             pthread_mutex_unlock( &out_mutex );
@@ -227,6 +228,8 @@ void *client(void * arg )
 //function that returns the number of requests in a given direction from a given floor in a thread-safe manner.
 int read_requests(int dir, int floor)
 {
+    if ( dir == WAIT )
+        return 0;
     int tmp;
     pthread_mutex_lock(&requests_mutex);
         tmp = requests[dir][floor];
@@ -295,15 +298,32 @@ int get_outside(int floor) //allows one person to leave the elevator
 int compute_direction(int dir, int curr_floor)
 {
     int ii;
-    if (curr_floor == 0)
-        return UP;
-    if (curr_floor == floor_count)
-        return DOWN;
+    if (dir == WAIT)
+    {
+        for (ii=0; ii<floor_count; ii++)
+        {
+            if ( targets[ii] > 0 )
+            {
+                if( ii > curr_floor)
+                    return UP;
+                else if (ii < curr_floor)
+                    return DOWN;
+            }
+        }
+        for (ii=0; ii<floor_count; ii++)
+        {
+            if ( (read_requests(UP, ii) > 0 ) || read_requests(DOWN,ii) > 0 )
+            {//go to floor ii
+                if( ii > curr_floor)
+                    return UP;
+                else if (ii < curr_floor)
+                    return DOWN;
+            }            
+        }
+        return WAIT;
+    } 
     if (dir == UP)
     {
-        //we make sure we're not at the top floor
-        if (curr_floor == floor_count)
-            return DOWN;
         //we check that someone INSIDE the elevator wants to get higher
         for ( ii=curr_floor+1 ; ii < floor_count; ii++)
         {// semaphore here?
@@ -316,14 +336,25 @@ int compute_direction(int dir, int curr_floor)
             if ( (read_requests(UP, ii) > 0 ) || read_requests(DOWN,ii) > 0 )
                 return UP;
         }
-        return DOWN;
+        for (ii = curr_floor -1 ; ii > 0 ; ii-- )
+        {
+            if ( (read_requests(UP, ii) > 0 ) || (read_requests(DOWN,ii) > 0) )
+            {//go to floor ii
+                return DOWN;
+            }            
+        } 
+        //if there are people inside wanting to go down:
+        for ( ii=curr_floor-1 ; ii > 0; ii--)
+        {
+            if (targets[ii] > 0 )
+                return DOWN;
+        }
+
+        return WAIT;
         //option to add the idea of not moving if there are no requests...
     }
     else if (dir == DOWN)
     {
-        //we make sure we're not at the bottom floor
-        if (curr_floor == 0)
-            return UP;
         //we check that someone INSIDE the elevator wants to get lower
         for ( ii=curr_floor-1 ; ii >= 0 ; ii--)
         {//semaphore here?
@@ -336,7 +367,20 @@ int compute_direction(int dir, int curr_floor)
             if ( (read_requests(UP, ii) > 0 ) || read_requests(DOWN,ii) > 0 )
                 return DOWN;
         }
-        return UP;
+        for (ii = curr_floor+1 ; ii <floor_count ; ii++ )
+        {
+            if ( (read_requests(UP, ii) > 0 ) || (read_requests(DOWN,ii) > 0) )
+            {//go to floor ii
+                return UP;
+            }            
+        } 
+        //if there are people inside wanting to go up:
+        for ( ii=curr_floor+1 ; ii < floor_count; ii++)
+        {
+            if (targets[ii] > 0 )
+                return UP;
+        }
+        return WAIT;
         //option to add the idea of not moving if there are no requests...
     }
     return -1;
@@ -345,45 +389,62 @@ int compute_direction(int dir, int curr_floor)
 void *elevator(void * arg)
 {
     //init?
-    int dir = UP;    
+    int dir = WAIT;    
     int curr_floor = 0;
 
     while(1)
     {
         wait_for_tick(); //everything starts with a tick from the clock
         dir = compute_direction(dir, curr_floor); //where we need to go, given curr dir & floor
+        elevator_direction = dir;
         if ( dir == UP)
         {
             //we move up
             curr_floor++;
             if ( (debug_lvl == MAXDEBUG ) )//|| (debug_lvl == AVGDEBUG ) )
-                printf("elevator moved UP to floor %d\n", curr_floor);
+                printf("Elevator moved UP to floor %d.\n", curr_floor);
         }
         else if (dir == DOWN)
         {   //am I forgetting something here?
             curr_floor--;
             if ( (debug_lvl == MAXDEBUG ) )//|| (debug_lvl == AVGDEBUG ) )
-                printf("elevator moved DOWN to floor %d\n", curr_floor);
+                printf("Elevator moved DOWN to floor %d.\n", curr_floor);
         }
         else 
         {
             if ( (debug_lvl == MAXDEBUG ) )//|| (debug_lvl == AVGDEBUG ) )
-                printf("elevator stayed on floor %d\n", curr_floor);
-            //no need to move
-            continue;
+                printf("Elevator stayed on floor %d.\n", curr_floor);
         }
 
         pthread_mutex_lock( &elevator_floor_mutex );
         elevator_floor=curr_floor;
         pthread_mutex_unlock( &elevator_floor_mutex );
-        
+        int dings_sent = 0;        
         //let passengers out
-        while (targets[curr_floor] > 0 )
+        while (targets[curr_floor] > 0  && dings_sent<clients_num )
+        {
+            dings_sent++;
             send_out_ding();
+        }
 
         //let passengers in
-        while ( ((read_requests(dir, curr_floor) > 0) || ((read_requests(1-dir, 0) > 0) && curr_floor==0) || ((read_requests(1-dir, floor_count-1) > 0) && curr_floor==floor_count-1) ) && passenger_count < max_capacity )
-            send_in_ding();            
+        //let people in who go in the direction we're moving
+        while ( read_requests(dir, curr_floor) > 0 && passenger_count < max_capacity && dings_sent<clients_num)
+        {
+            send_in_ding();
+            dings_sent++;
+        }
+
+        //if we weren't moving, let people in who are at our floor
+        //and if we can reverse directions, we also let some people in
+        if (dir == WAIT || passenger_count == 0)
+        {
+            while ( ( (read_requests(UP, curr_floor) > 0) || (read_requests(DOWN, curr_floor) > 0) ) && passenger_count < max_capacity && dings_sent<clients_num )
+            {
+                send_in_ding();
+                dings_sent++;
+            }
+        }
     }
 }
 
@@ -409,12 +470,26 @@ int wait_for_in_ding(int curr_floor, int target_floor, int worker_id) //blocking
     pthread_cond_wait(&in_ding_waiter, &in_ding_mutex);
     if ( get_elevator_floor() == curr_floor ) //this following operations must be atomic, and thread-safe.
     {
+        int ii;
+        //if the elevator is carrying people down, and we want to go up, we pass.
+        if ( curr_floor < target_floor)
+            for ( ii = curr_floor - 1; ii > 0; ii--)
+                if ( targets[ii] > 0 )
+                    return 1;
+
+        //if the elevator is carrying people up, and we want to go down, we pass.
+        if ( curr_floor > target_floor)
+            for ( ii = curr_floor + 1; ii < floor_count; ii++)
+                if ( targets[ii] > 0 )
+                    return 1;
+
+
         //get inside...quick!
         //or at least try
         if (get_inside(curr_floor, target_floor) == 0 ) //operation succeeded. and that is a blocking operation through mutex
         {
             if ( (debug_lvl == MAXDEBUG ) || (debug_lvl == AVGDEBUG ) )
-                printf("Client %d entered the elevator at floor %d heading toward floor %d\n",worker_id,curr_floor,target_floor); 
+                printf("Client %d entered the elevator at floor %d heading towards floor %d.\n",worker_id,curr_floor,target_floor); 
             passengers[worker_id] = 1;
             return 0;
         }
