@@ -1,22 +1,5 @@
-/*
- * =====================================================================================
- *
- *       Filename:  mythreads.h
- *
- *    Description:  Fake MyThreads Library Header File.
- *
- *        Version:  1.0
- *        Created:  03/08/2012 11:54:01 AM
- *       Revision:  none
- *       Compiler:  gcc
- *
- *         Author:  Xing Shi Cai (XSC), xingshi.cai@mail.mcgill.ca
- *   Organization:  McGill Univ.
- *
- * =====================================================================================
- */
-
 #include <ucontext.h>
+#include <slack/list.h>
 
 /* Thread description structure */
 typedef struct
@@ -32,6 +15,12 @@ typedef struct
   ucontext_t *context;
   long long cpuTime;
 }  MyThread;
+
+typedef struct
+{
+  int value;
+  List * threads;
+} semaphore;
 
 int init_my_threads();
 

@@ -1,0 +1,19 @@
+Ilia Denotkine
+260375925
+
+Assignement # 3 - threads
+
+everything has been implemented.
+
+The minimal quantum size is 250 microseconds. if a lesser value is entered, it will be increased to 250 microseconds.
+The cputime is displayed in microseconds
+
+Threads that have been killed remain in RAM in order for it to be possible to display the amount of time each thread took to execute. 
+(this can be fized with a single line - threads.c:35   comment out that line)
+
+there is a harcoded limit for 100 semaphores. 
+It can be modified in threads.c:9 
+
+
+oh. and the makefile is hardcoded to compile with sem-ex.c
+And you MUST use the mythreads.h file that I provide. It is different from the supplied one.
