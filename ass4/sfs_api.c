@@ -1,0 +1,334 @@
+#include <stdio.h>
+#include <stdlib.h> 
+#include <string.h>
+#include <unistd.h>
+#include <time.h>
+#include "sfs_api.h"
+#include "disk_emu.h"
+
+
+#define DISK_LOCATION "/tmp/my_disk"
+#define SECTOR_SIZE 1024 //bytes
+#define SECTOR_COUNT 4096 //total disk size = 4Mb
+#define MAX_FILE_COUNT 100
+
+//resident structures
+inode * root;
+fat_entry * fat_table;
+int fat_location;
+int root_location = 0; //always after sector size and sector count
+int file_descriptors[2][MAX_FILE_COUNT]; //read, write; indicating offset
+
+unsigned char * empty_sectors; //1 = free; 0 = occupied
+
+int find_free()
+{
+	int ii =0 ;
+	while ( ++ii<SECTOR_COUNT )
+		if (empty_sectors[ii] == 1)
+			return ii;
+	return -1;
+}	
+int find_next_fat()
+{
+	int ii = 0;
+	while ( fat_table[ii].disk_block != 0 )
+		ii++;
+	return ii;
+}	
+
+
+void create_empty_table()
+{
+	//create list of sectors. mark as used from the info stored in the FAT
+	empty_sectors = (unsigned char * )malloc(sizeof(unsigned char) * SECTOR_COUNT );
+	int ii;
+	for (ii = 0; ii< SECTOR_COUNT;ii++)
+		empty_sectors[ii] = 1; 
+
+	//root and FAT are busy
+	//root
+	int root_size = MAX_FILE_COUNT * 32;
+	int sectors_taken = (root_size/SECTOR_SIZE);
+	if( root_size%SECTOR_SIZE > 0 )
+		sectors_taken++;
+	//FAT
+	int fat_size = (8 * SECTOR_COUNT) / SECTOR_SIZE; //32 sectors
+	if ((8 * SECTOR_COUNT) % SECTOR_SIZE > 0 )
+		fat_size++;
+	for (ii = 0; ii < (sectors_taken + fat_size); ii++)
+		empty_sectors[ii] = 0;
+
+	//go through FAT, removing the busy sectors
+	for(ii = 0; ii < SECTOR_COUNT; ii ++)
+	{
+		//read row for sector
+		fat_entry row = fat_table[ii];
+		if ( row.disk_block != 0 )
+		{
+			empty_sectors[row.disk_block] = 0;
+		}
+	}
+}
+
+void mksfs(int fresh)
+{
+	int root_size = MAX_FILE_COUNT * sizeof(inode);
+	int sectors_taken = (root_size/SECTOR_SIZE);
+	if( root_size%SECTOR_SIZE > 0 )
+		sectors_taken++;
+	int fat_size= sizeof(fat_entry) * SECTOR_COUNT;
+	int fat_sectors = fat_size / SECTOR_SIZE; //32 sectors
+	if ((sizeof(fat_entry) * SECTOR_COUNT) % SECTOR_SIZE > 0 )
+		fat_sectors++;
+
+
+	if(fresh)
+	{
+		init_fresh_disk(DISK_LOCATION, SECTOR_SIZE, SECTOR_COUNT);
+		//create root and FAT.
+		
+		root = (inode * ) calloc(MAX_FILE_COUNT, sizeof(inode));
+		fat_table = (fat_entry * ) calloc(SECTOR_COUNT, sizeof(fat_entry));
+		//write them to DISK.
+		memset(root,0, MAX_FILE_COUNT* sizeof(inode));
+		memset(fat_table, 0, SECTOR_COUNT * sizeof(fat_entry) );
+
+		write_blocks(0, sectors_taken, (void *) root);
+		write_blocks(sectors_taken, fat_sectors, (void *) fat_table);
+	}
+	else
+	{
+		init_disk(DISK_LOCATION, SECTOR_SIZE, SECTOR_COUNT);
+		//read root and FAT into RAM
+		root =  (inode * ) malloc (root_size);
+		read_blocks(0, sectors_taken, root);
+		
+		fat_table = (fat_entry * ) malloc( fat_size);
+		read_blocks(sectors_taken, fat_sectors, fat_table);
+
+	}
+	create_empty_table();
+}
+void sfs_ls()
+{
+	//go through root, print all
+	int ii;
+	for (ii = 0 ; ii < MAX_FILE_COUNT ;ii++)
+	{
+		if (strlen(root[ii].filename) != 0 )
+		{
+			printf("%12s\t%13d\t%13d\n",root[ii].filename, root[ii].created_time, root[ii].size);
+		}
+	}
+	
+}
+void write_structs()
+{
+	int root_size = MAX_FILE_COUNT * sizeof(inode);
+	int sectors_taken = (root_size/SECTOR_SIZE);
+	if( root_size%SECTOR_SIZE > 0 )
+		sectors_taken++;
+	int fat_size= sizeof(fat_entry) * SECTOR_COUNT;
+	int fat_sectors = fat_size / SECTOR_SIZE; //32 sectors
+
+	if ((sizeof(fat_entry) * SECTOR_COUNT) % SECTOR_SIZE > 0 )
+		fat_sectors++;
+
+	write_blocks(0, sectors_taken, (void *) root);
+	write_blocks(sectors_taken, fat_sectors, (void *) fat_table);
+	
+	free(empty_sectors);
+	create_empty_table();
+}
+
+int exists( char * name)
+{
+	int ii;
+	for (ii=0; ii< MAX_FILE_COUNT;ii++)
+	{
+		if ( root[ii].filename != NULL && strcmp(root[ii].filename, name) == 0)
+			return ii;
+	}
+	return -1;
+}
+int sfs_fopen(char *name)
+{
+	//verify if file is in root
+	int index = exists(name);
+//	printf("exists : %s\t%d\n",name,index);
+	int ii;
+	if ( index == -1 )
+	{
+		inode * curr = (inode * ) malloc(sizeof(inode));
+		strcpy(curr->filename, name);
+		curr->first_row = 0;
+		curr->size = 0;
+		//attributes
+		curr->created_time = time(NULL);
+		curr->last_access_time =time(NULL);
+		curr->last_modified_time = time (NULL);	
+		
+		//insert. record new index
+		
+		//find empty line
+
+		for (ii = 0; ii<MAX_FILE_COUNT; ii++)
+		{
+			if (strlen(root[ii].filename) == 0)
+				break;
+		}
+		if ( ii < MAX_FILE_COUNT)
+			root[ii] = *curr;
+		else
+		{	//error!
+			return -1;
+		}
+	}
+	//create pointers	
+	
+	
+	write_structs();
+//	printf("file :%s \t index: %d\n", name, ii);
+	return ii;
+}
+void sfs_fclose(int fileID)
+{
+	;
+}
+void sfs_fwrite(int index, char *buf, int length)
+{
+//	printf("writing %d bytes\n",length);	
+	my_sfs_fwrite(index, buf, length, 0); //to be fixed later
+}
+void my_sfs_fwrite(int index, char *buf, int length, int offset)
+{ //offset is needed in case seek() happened
+//	printf("index: %d\tsize: %d\t writing: %d\n",index, root[index].size, length);
+
+	fat_entry curr = fat_table[root[index].first_row];
+	while(curr.next_entry != 0) 
+		curr = fat_table[curr.next_entry];
+
+	if ( root[index].first_row == 0 ) // we need to allocate it!!!!
+	{
+		int tmp = find_next_fat();
+		curr = fat_table[tmp];
+		root[index].first_row = tmp;
+	}
+	if ( root[index].size % SECTOR_SIZE !=0 )
+	{
+//		printf("reading... curr.disk_block [%i]\n", curr.disk_block);
+		//append to current sector
+		int remaining = SECTOR_SIZE - (root[index].size % SECTOR_SIZE);
+		char * buffer = malloc(SECTOR_SIZE*2);
+		read_blocks(curr.disk_block ,1, buffer);
+		//buffer is now filled with current contents
+		//we append the rest to it, and save.
+		char * final = malloc(SECTOR_SIZE);
+		memcpy(final, buffer, (root[index].size % SECTOR_SIZE) );
+
+		int min = (length > remaining)? remaining: length; 
+		memcpy(final + (root[index].size % SECTOR_SIZE), buf, min);
+		
+		write_blocks(curr.disk_block, 1, (void *) final);
+
+		root[index].size += min;
+		root[index].last_access_time = time(NULL);
+		root[index].last_modified_time = time(NULL);
+
+		if( length > remaining)
+			my_sfs_fwrite(index, buf+min, length-min, 0);
+		else	
+			write_structs();
+	}
+	else
+	{
+		//find next free sector
+		int free = find_free();
+		if ( free == -1)
+			return;
+		
+		if ( root[index].size > 0 )
+		{
+			int next = find_next_fat();
+			//add new sector
+
+			curr.next_entry = next;
+
+			fat_table[next].disk_block = free;
+		}
+		else
+		{
+			fat_table[root[index].first_row].disk_block = free;
+		}
+
+		write_blocks(free, 1, (void *) buf); //TODO: do I need to add padding?
+
+		root[index].size += (length < SECTOR_SIZE) ? length:SECTOR_SIZE;
+		root[index].last_access_time = time(NULL);
+		root[index].last_modified_time = time(NULL);
+
+		if ( length > SECTOR_SIZE ) //if we still need to write more
+			my_sfs_fwrite(index, buf+SECTOR_SIZE, length-SECTOR_SIZE, 0);
+		else
+		{
+			write_structs();
+		}
+	}
+	
+}
+void sfs_fread(int fileID, char *buf, int length)
+{
+	//assume no offset now...
+	int read = 0;
+	int size = root[fileID].size;
+	int offset = 0;
+	int currblock = root[fileID].first_row;
+
+	void * my_buf = malloc(SECTOR_SIZE);
+
+	while(size > 0 && length > 0)
+	{
+		int min = (size > length)? length:size;
+		if( min > SECTOR_SIZE)
+			min = SECTOR_SIZE;
+
+		read_blocks( fat_table[currblock].disk_block, 1, my_buf );
+
+		memcpy(buf+offset, my_buf, min);
+		printf("read: block [%d] offset [%d] min [%d]\n", fat_table[currblock].disk_block , offset, min);
+		length -= min;
+		size -= min;
+		offset+= min;
+		read += min;
+		//TODO: adjust read pointer
+
+		currblock = fat_table[currblock].next_entry;
+	}
+	
+}
+void sfs_fseek(int fileID, int loc)
+{
+	;
+}
+int sfs_remove(char *file)
+{
+	int index = exists(file);
+	if( index == -1)	
+		return -1;
+	
+	int curr_fat = root[index].first_row;
+	root[index].filename[0] = '\0';
+	
+	//go thtough fat table...
+	while ( curr_fat!= 0 )
+	{
+		int next_fat = fat_table[curr_fat].next_entry;
+		fat_table[curr_fat].next_entry=0;
+		fat_table[curr_fat].disk_block=0;
+		curr_fat = next_fat;
+	}
+	return 0;
+}
+
+
