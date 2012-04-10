@@ -147,6 +147,7 @@ main(int argc, char **argv)
                 exit(-1);
             }
             sfs_fread(fds[i], buffer, chunksize);
+            printf("read command: sfs_read( %d, buffer, %d)\n",fds[i], chunksize);
             for (k = 0; k < chunksize; k++) {
                 if (buffer[k] != (char)(j+k)) {
                     fprintf(stderr, "ERROR: data error at offset %d in file %s (%d,%d)\n",
@@ -157,6 +158,23 @@ main(int argc, char **argv)
             }
             free(buffer);
         }
+    }
+
+
+    int my_test_file = sfs_fopen("AAAAAAAA.AAA");
+    char * data = malloc(2056);
+    int ii;
+    for(ii=0;ii<2056;ii++)
+    {
+        data[ii] = 48 + (ii%10);
+    }
+    sfs_fwrite(my_test_file, data, 2056);
+    char * read = malloc(2056);
+    sfs_fread(my_test_file, read, 200);
+    for (ii = 0; ii< 200; ii++)
+    {
+        if ( read[ii] != data[ii])
+            printf("data discrepancy at index [%d]  (%c - %c)\n", ii, data[ii], read[ii]);
     }
 
 	exit(0);
