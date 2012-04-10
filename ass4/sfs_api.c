@@ -344,12 +344,32 @@ void sfs_fread(int fileID, char *buf, int length)
 
 		read_blocks( fat_table[currblock].disk_block, 1, my_buf );
 
-		memcpy(buf+read, my_buf, min);
+        if ( read-offset < 0 && read-offset+min < 0 )
+        {
+		    read += min;
+        }
+        else if (read - offset < 0)
+        {
+            //find out where to copy from...
+            int start = offset - read;
+            min = ( SECTOR_SIZE - start > length ) ? length: SECTOR_SIZE - start ;
+            memcpy ( buf , my_buf + start, min);
+            read += start;
+            length -= min;
+            size -= min;
+            read += min;
+            file_descriptors[0][fileID] += min; 
+        }
+        else
+        {
+		    memcpy(buf+read-offset, my_buf, min);
+            length -= min;
+            size -= min;
+            read += min;
+            file_descriptors[0][fileID] += min; 
+        }
+
 //		printf("read: block [%d] offset [%d] min [%d]\n", fat_table[currblock].disk_block , offset, min);
-		length -= min;
-		size -= min;
-		read += min;
-        file_descriptors[0][fileID] += min; 
 
 		currblock = fat_table[currblock].next_entry;
 	}

@@ -170,12 +170,20 @@ main(int argc, char **argv)
     }
     sfs_fwrite(my_test_file, data, 2056);
     char * read = malloc(2056);
-    sfs_fread(my_test_file, read, 200);
-    for (ii = 0; ii< 200; ii++)
+    sfs_fread(my_test_file, read, 1);
+    for (ii = 0; ii< 1; ii++)
     {
         if ( read[ii] != data[ii])
             printf("data discrepancy at index [%d]  (%c - %c)\n", ii, data[ii], read[ii]);
     }
+    sfs_fread(my_test_file, read, 4);
+    for (ii = 0; ii< 4; ii++)
+    {
+        if ( read[ii] != data[ii+1])
+            printf("data discrepancy at index [%d]  (%c - %c)\n", ii, data[ii], read[ii]);
+    }
+    free(read);
+
 
 	exit(0);
 

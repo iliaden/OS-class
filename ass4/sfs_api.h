@@ -12,6 +12,7 @@ void my_sfs_fwrite(int index, char *buf, int length, int offset);
 int find_free();
 int find_next_fat();
 void create_empty_table();
+int find_last_disk(int row);
 
 
 typedef struct {
