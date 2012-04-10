@@ -1,0 +1,41 @@
+it works...
+
+compile with 
+gcc -g -Wall -o ./test sfs_api.c disk_emu.c sfs_test.c
+
+the disk is stored in /tmp/my_disk  
+it is a 4Mb disk.
+block size = 1024
+number of blocks = 4096
+total disk size = 4Mb
+Max number of files supported = 100
+Max file size = not secified. as long as there is disk space.
+Min file size = see above
+Max filename length = 12 characters, including extension
+
+The only attribute that is printed is the created time. 
+
+
+test output: ( ./test )
+
+    filename             size    created_time
+JOUVDLWD.VBD                0      1334088759
+OMLRRUNT.EYX                0      1334088759
+
+File JOUVDLWD.VBD now has length 27724 and OMLRRUNT.EYX now has length 28159:
+    filename             size    created_time
+JOUVDLWD.VBD            27724      1334088759
+OMLRRUNT.EYX            28159      1334088759
+After deleting file JOUVDLWD.VBD:
+    filename             size    created_time
+OMLRRUNT.EYX            28159      1334088759
+After deleting file OMLRRUNT.EYX:
+    filename             size    created_time
+Created 100 files in the root directory
+Simultaneously opened 100 files
+Tests sfs_fseek
+Test program exiting with 0 errors
+
+
+if anything, the source is located at my github:  
+    github.com/iliaden/OS-class/tree/master/ass4
