@@ -122,11 +122,12 @@ void sfs_ls()
 {
 	//go through root, print all
 	int ii;
+    printf("%12s\t%13s\t%13s\n","filename","size","created_time");
 	for (ii = 0 ; ii < MAX_FILE_COUNT ;ii++)
 	{
 		if (strlen(root[ii].filename) != 0 )
 		{
-			printf("%12s\t%13d\t%13d\n",root[ii].filename, root[ii].created_time, root[ii].size);
+			printf("%12s\t%13d\t%13d\n",root[ii].filename, root[ii].size, root[ii].created_time);
 		}
 	}
 	
@@ -178,6 +179,7 @@ int sfs_fopen(char *name)
 	{
 		inode * curr = (inode * ) malloc(sizeof(inode));
 		strcpy(curr->filename, name);
+        curr->filename[13] = '\0';
 		curr->first_row = 0;
 		curr->size = 0;
 		//attributes
@@ -204,7 +206,7 @@ int sfs_fopen(char *name)
 	}
 	//create pointers	
     file_descriptors[0][index]	= 0;
-    file_descriptors[1][index]	= 0;
+    file_descriptors[1][index]	= root[index].size;
 	
 	write_structs();
 //	printf("file :%s \t index: %d\n", name, ii);
@@ -216,11 +218,6 @@ void sfs_fclose(int fileID)
     file_descriptors[1][fileID] = 0;
 	;
 }
-void sfs_fwrite(int index, char *buf, int length)
-{
-//	printf("writing %d bytes\n",length);	
-	my_sfs_fwrite(index, buf, length, 0); //to be fixed later
-}
 
 int find_last_disk(int row)
 {
@@ -229,11 +226,12 @@ int find_last_disk(int row)
     return fat_table[row].disk_block;
 }
 
-void my_sfs_fwrite(int index, char *buf, int length, int offset)
+void sfs_fwrite(int index, char *buf, int length)
 { //offset is needed in case seek() happened
     if (DEBUG)
     	printf("index: %d\tsize: %d\t writing: %d\n",index, root[index].size, length);
 
+    int offset = file_descriptors[1][index];
 
     if ( root[index].first_row == 0 )
     {
@@ -255,11 +253,12 @@ void my_sfs_fwrite(int index, char *buf, int length, int offset)
 		root[index].size += min;
 		root[index].last_access_time = time(NULL);
 		root[index].last_modified_time = time(NULL);
+        file_descriptors[1][index] += min;
 
 		if( length > min)
         {
             create_empty_table();
-			my_sfs_fwrite(index, buf+min, length-min, 0);
+			sfs_fwrite(index, buf+min, length-min);
         }
 		else
         {    
@@ -267,27 +266,28 @@ void my_sfs_fwrite(int index, char *buf, int length, int offset)
         }
         return;
     }
-    else if ( root[index].size % SECTOR_SIZE !=0 )
+    else if ( offset % SECTOR_SIZE !=0 )
 	{
 //		printf("reading... curr.disk_block [%i]\n", curr.disk_block);
 		//append to current sector
-		int remaining = SECTOR_SIZE - (root[index].size % SECTOR_SIZE);
+		int remaining = SECTOR_SIZE - (offset % SECTOR_SIZE);
 		char * buffer = malloc(SECTOR_SIZE);
 
 		read_blocks(find_last_disk(root[index].first_row) ,1, buffer);
 		//buffer is now filled with current contents
 		//we append the rest to it, and save.
 		void * final = malloc(SECTOR_SIZE);
-		memcpy(final, buffer, (root[index].size % SECTOR_SIZE) );
+		memcpy(final, buffer, (offset % SECTOR_SIZE) );
 
 		int min = (length > remaining)? remaining: length; 
-		memcpy(final + (root[index].size % SECTOR_SIZE), buf, min);
+		memcpy(final + (offset % SECTOR_SIZE), buf, min);
 		
 		write_blocks(find_last_disk(root[index].first_row), 1, final);
 
 		root[index].size += min;
 		root[index].last_access_time = time(NULL);
 		root[index].last_modified_time = time(NULL);
+        file_descriptors[1][index] += min;
 
         free(buffer);
         free(final);
@@ -295,7 +295,7 @@ void my_sfs_fwrite(int index, char *buf, int length, int offset)
 		if( length > remaining)
         {
             create_empty_table();
-			my_sfs_fwrite(index, buf+min, length-min, 0);
+			sfs_fwrite(index, buf+min, length-min);
         }
 		else	
         {
@@ -325,11 +325,12 @@ void my_sfs_fwrite(int index, char *buf, int length, int offset)
 		root[index].size += min;
 		root[index].last_access_time = time(NULL);
 		root[index].last_modified_time = time(NULL);
+        file_descriptors[1][index] += min;
 
 		if ( length > SECTOR_SIZE ) 
         {   //if we still need to write more
             create_empty_table();
-			my_sfs_fwrite(index, buf+min, length-min, 0);
+			sfs_fwrite(index, buf+min, length-min);
         }
 		else
 		{
@@ -403,7 +404,8 @@ void sfs_fread(int fileID, char *buf, int length)
 }
 void sfs_fseek(int fileID, int loc)
 {
-	;
+    file_descriptors[0][fileID] = loc;
+    file_descriptors[1][fileID] = loc;
 }
 int sfs_remove(char *file)
 {

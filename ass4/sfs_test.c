@@ -295,9 +295,7 @@ main(int argc, char **argv)
 
     /* Now we try to re-initialize the system.
     */
-    printf("pre-reinit\n");
     mksfs(0);
-    printf("post-reinit\n");
 
     for (i = 0; i < nopen; i++) {
         fds[i] = sfs_fopen(names[i]);
@@ -322,7 +320,6 @@ main(int argc, char **argv)
         free(names[i]);
         names[i] = NULL;
     }
-	exit(0);
 
     //-------- The following part tests sfs_fseek
 

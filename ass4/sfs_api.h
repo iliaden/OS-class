@@ -8,7 +8,6 @@ void sfs_fwrite(int fileID, char *buf, int length);
 void sfs_fread(int fileID, char *buf, int length);
 void sfs_fseek(int fileID, int loc);
 int sfs_remove(char *file);
-void my_sfs_fwrite(int index, char *buf, int length, int offset);
 int find_free();
 int find_next_fat();
 void create_empty_table();
@@ -16,7 +15,7 @@ int find_last_disk(int row);
 
 
 typedef struct {
-	char filename [MAX_FILENAME_LENGTH];
+	char filename [MAX_FILENAME_LENGTH+1];
 	unsigned int first_row;
 	unsigned int size;
 	//attributes
