@@ -14,7 +14,7 @@
  * do not _require_ that you support this many files. This is just to
  * test the behavior of your code.
  */
-#define MAX_FD 100
+#define MAX_FD 100 
 
 /* The maximum number of bytes we'll try to write to a file. If you
  * support much shorter or larger files for some reason, feel free to
@@ -120,7 +120,6 @@ main(int argc, char **argv)
                 buffer[k] = (char) (j+k);
             }
             sfs_fwrite(fds[i], buffer, chunksize);
-//            printf("write command: fwrite(%d, buffer, %d)\n",fds[i],chunksize);
             free(buffer);
         }
     }
@@ -130,55 +129,6 @@ main(int argc, char **argv)
     printf("File %s now has length %d and %s now has length %d:\n",
             names[0], filesize[0], names[1], filesize[1]);
     sfs_ls();
-
-/*
-    int my_test_file = sfs_fopen("AAAAAAAA.AAA");
-    char * data = malloc(30000);
-    int ii;
-    for(ii=0;ii<30000;ii++)
-    {
-        data[ii] = 48 + (ii%10);
-    }
-    for (ii = 0; ii < 8;ii++)
-        sfs_fwrite(my_test_file, data+(ii*3000), 3000);
-    for (ii = 0; ii < 8;ii++)
-        sfs_fwrite(my_test_file, data+(ii*600), 600);
-    for (ii = 0; ii < 8;ii++)
-        sfs_fwrite(my_test_file, data+(ii*120), 120);
-    for (ii = 0; ii < 10;ii++)
-        sfs_fwrite(my_test_file, data+(ii*24), 24);
-
-    char * read = malloc(30000);
-
-    sfs_fread(my_test_file, read, 20001);
-    for (ii = 0; ii< 20001; ii++)
-        if ( read[ii] != data[ii])
-            printf("data discrepancy at index [%d]  (%c - %c)\n", ii, data[ii], read[ii]);
-    int offset = 20001;
-    sfs_fread(my_test_file, read, 5001);
-    for (ii = 0; ii< 5001; ii++)
-        if ( read[ii] != data[ii+offset])
-            printf("data discrepancy at index [%d]  (%c - %c)\n", ii, data[ii+offset], read[ii]);
-    offset = 25002;
-    sfs_fread(my_test_file, read, 1002);
-    for (ii = 0; ii< 1002; ii++)
-        if ( read[ii] != data[ii+offset])
-            printf("data discrepancy at index [%d]  (%c - %c)\n", ii, data[ii+offset], read[ii]);
-    offset = 26004;
-    for (ii = 0; ii <108; ii ++)
-    {
-        int jj;
-        sfs_fread(my_test_file, read, 37);
-        for (jj = 0; jj< 37; jj++)
-            if ( read[jj] != data[jj+offset])
-                printf("read [%d]. offset [%d] data discrepancy at index [%d]  (%c - %c)\n", ii, offset+jj, jj, data[jj+offset], read[jj]);
-        offset +=37;
-    }
-    free(read);
-    free(data);
-    exit(0);
-*/
-
 
     fds[1] = sfs_fopen(names[1]);
 
@@ -195,20 +145,17 @@ main(int argc, char **argv)
                 exit(-1);
             }
             sfs_fread(fds[i], buffer, chunksize);
-//            printf("read command: sfs_read( %d, buffer, %d)\n",fds[i], chunksize);
             for (k = 0; k < chunksize; k++) {
                 if (buffer[k] != (char)(j+k)) {
-                    fprintf(stdout, "ERROR: data error at offset %d in file %s (%d,%d)\n",
+                    fprintf(stderr, "ERROR: data error at offset %d in file %s (%d,%d)\n",
                             j+k, names[i], buffer[k], (char)(j+k));
                     error_count++;
-//                    break;
+                    break;
                 }
             }
             free(buffer);
         }
     }
-
-
 
     for (i = 0; i < 2; i++) {
         sfs_fclose(fds[i]);
