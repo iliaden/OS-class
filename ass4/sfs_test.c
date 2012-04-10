@@ -120,6 +120,7 @@ main(int argc, char **argv)
                 buffer[k] = (char) (j+k);
             }
             sfs_fwrite(fds[i], buffer, chunksize);
+//            printf("write command: fwrite(%d, buffer, %d)\n",fds[i],chunksize);
             free(buffer);
         }
     }
@@ -130,6 +131,53 @@ main(int argc, char **argv)
             names[0], filesize[0], names[1], filesize[1]);
     sfs_ls();
 
+/*
+    int my_test_file = sfs_fopen("AAAAAAAA.AAA");
+    char * data = malloc(30000);
+    int ii;
+    for(ii=0;ii<30000;ii++)
+    {
+        data[ii] = 48 + (ii%10);
+    }
+    for (ii = 0; ii < 8;ii++)
+        sfs_fwrite(my_test_file, data+(ii*3000), 3000);
+    for (ii = 0; ii < 8;ii++)
+        sfs_fwrite(my_test_file, data+(ii*600), 600);
+    for (ii = 0; ii < 8;ii++)
+        sfs_fwrite(my_test_file, data+(ii*120), 120);
+    for (ii = 0; ii < 10;ii++)
+        sfs_fwrite(my_test_file, data+(ii*24), 24);
+
+    char * read = malloc(30000);
+
+    sfs_fread(my_test_file, read, 20001);
+    for (ii = 0; ii< 20001; ii++)
+        if ( read[ii] != data[ii])
+            printf("data discrepancy at index [%d]  (%c - %c)\n", ii, data[ii], read[ii]);
+    int offset = 20001;
+    sfs_fread(my_test_file, read, 5001);
+    for (ii = 0; ii< 5001; ii++)
+        if ( read[ii] != data[ii+offset])
+            printf("data discrepancy at index [%d]  (%c - %c)\n", ii, data[ii+offset], read[ii]);
+    offset = 25002;
+    sfs_fread(my_test_file, read, 1002);
+    for (ii = 0; ii< 1002; ii++)
+        if ( read[ii] != data[ii+offset])
+            printf("data discrepancy at index [%d]  (%c - %c)\n", ii, data[ii+offset], read[ii]);
+    offset = 26004;
+    for (ii = 0; ii <108; ii ++)
+    {
+        int jj;
+        sfs_fread(my_test_file, read, 37);
+        for (jj = 0; jj< 37; jj++)
+            if ( read[jj] != data[jj+offset])
+                printf("read [%d]. offset [%d] data discrepancy at index [%d]  (%c - %c)\n", ii, offset+jj, jj, data[jj+offset], read[jj]);
+        offset +=37;
+    }
+    free(read);
+    free(data);
+    exit(0);
+*/
 
 
     fds[1] = sfs_fopen(names[1]);
@@ -147,13 +195,13 @@ main(int argc, char **argv)
                 exit(-1);
             }
             sfs_fread(fds[i], buffer, chunksize);
-            printf("read command: sfs_read( %d, buffer, %d)\n",fds[i], chunksize);
+//            printf("read command: sfs_read( %d, buffer, %d)\n",fds[i], chunksize);
             for (k = 0; k < chunksize; k++) {
                 if (buffer[k] != (char)(j+k)) {
-                    fprintf(stderr, "ERROR: data error at offset %d in file %s (%d,%d)\n",
+                    fprintf(stdout, "ERROR: data error at offset %d in file %s (%d,%d)\n",
                             j+k, names[i], buffer[k], (char)(j+k));
                     error_count++;
-                    break;
+//                    break;
                 }
             }
             free(buffer);
@@ -161,31 +209,6 @@ main(int argc, char **argv)
     }
 
 
-    int my_test_file = sfs_fopen("AAAAAAAA.AAA");
-    char * data = malloc(2056);
-    int ii;
-    for(ii=0;ii<2056;ii++)
-    {
-        data[ii] = 48 + (ii%10);
-    }
-    sfs_fwrite(my_test_file, data, 2056);
-    char * read = malloc(2056);
-    sfs_fread(my_test_file, read, 1);
-    for (ii = 0; ii< 1; ii++)
-    {
-        if ( read[ii] != data[ii])
-            printf("data discrepancy at index [%d]  (%c - %c)\n", ii, data[ii], read[ii]);
-    }
-    sfs_fread(my_test_file, read, 4);
-    for (ii = 0; ii< 4; ii++)
-    {
-        if ( read[ii] != data[ii+1])
-            printf("data discrepancy at index [%d]  (%c - %c)\n", ii, data[ii], read[ii]);
-    }
-    free(read);
-
-
-	exit(0);
 
     for (i = 0; i < 2; i++) {
         sfs_fclose(fds[i]);
@@ -272,7 +295,9 @@ main(int argc, char **argv)
 
     /* Now we try to re-initialize the system.
     */
+    printf("pre-reinit\n");
     mksfs(0);
+    printf("post-reinit\n");
 
     for (i = 0; i < nopen; i++) {
         fds[i] = sfs_fopen(names[i]);
@@ -297,6 +322,7 @@ main(int argc, char **argv)
         free(names[i]);
         names[i] = NULL;
     }
+	exit(0);
 
     //-------- The following part tests sfs_fseek
 

@@ -11,6 +11,7 @@
 #define SECTOR_SIZE 1024 //bytes
 #define SECTOR_COUNT 4096 //total disk size = 4Mb
 #define MAX_FILE_COUNT 100
+#define DEBUG 0
 
 //resident structures
 inode * root;
@@ -96,15 +97,22 @@ void mksfs(int fresh)
 
 		write_blocks(0, sectors_taken, (void *) root);
 		write_blocks(sectors_taken, fat_sectors, (void *) fat_table);
+	    create_empty_table();
+        /*hack: create a file, then delete it*/
+        int id = sfs_fopen("AAAAAAAA.AAA");
+        char * data = calloc(50000, sizeof(char));
+        sfs_fwrite(id, data, 50000);
+        sfs_fclose(id);
+        sfs_remove("AAAAAAAA.AAA");
 	}
 	else
 	{
 		init_disk(DISK_LOCATION, SECTOR_SIZE, SECTOR_COUNT);
 		//read root and FAT into RAM
-		root =  (inode * ) malloc (root_size);
+		root =  (inode * ) malloc (sectors_taken * SECTOR_SIZE);
 		read_blocks(0, sectors_taken, root);
 		
-		fat_table = (fat_entry * ) malloc( fat_size);
+		fat_table = (fat_entry * ) malloc( fat_sectors * SECTOR_COUNT);
 		read_blocks(sectors_taken, fat_sectors, fat_table);
 
 	}
@@ -204,6 +212,8 @@ int sfs_fopen(char *name)
 }
 void sfs_fclose(int fileID)
 {
+    file_descriptors[0][fileID] = 0;
+    file_descriptors[1][fileID] = 0;
 	;
 }
 void sfs_fwrite(int index, char *buf, int length)
@@ -221,7 +231,8 @@ int find_last_disk(int row)
 
 void my_sfs_fwrite(int index, char *buf, int length, int offset)
 { //offset is needed in case seek() happened
-//	printf("index: %d\tsize: %d\t writing: %d\n",index, root[index].size, length);
+    if (DEBUG)
+    	printf("index: %d\tsize: %d\t writing: %d\n",index, root[index].size, length);
 
 
     if ( root[index].first_row == 0 )
@@ -335,6 +346,8 @@ void sfs_fread(int fileID, char *buf, int length)
 	int offset = file_descriptors[0][fileID];
 	int currblock = root[fileID].first_row;
 
+    if(DEBUG)
+        printf("expecting last byte to be at position %d. offset = [%d]\n",offset+length, offset);
 	void * my_buf = malloc(SECTOR_SIZE);
 	while(size > 0 && length > 0)
 	{
@@ -344,32 +357,44 @@ void sfs_fread(int fileID, char *buf, int length)
 
 		read_blocks( fat_table[currblock].disk_block, 1, my_buf );
 
-        if ( read-offset < 0 && read-offset+min < 0 )
+        if ( read-offset < 0 && read-offset+SECTOR_SIZE < 0 )
         {
-		    read += min;
+		    read += SECTOR_SIZE;
+            size -= SECTOR_SIZE;
         }
         else if (read - offset < 0)
         {
+            if(DEBUG)
+                printf("starting option 2: read [%d] offset [%d] length [%d]\n",read, offset, length);
             //find out where to copy from...
             int start = offset - read;
-            min = ( SECTOR_SIZE - start > length ) ? length: SECTOR_SIZE - start ;
+            min = ( (SECTOR_SIZE - start) > length ) ? length: (SECTOR_SIZE - start) ;
+            if(DEBUG)
+                printf("computed: min [%d] ; start [%d]\n", min, start);
             memcpy ( buf , my_buf + start, min);
             read += start;
             length -= min;
             size -= min;
             read += min;
+            if(DEBUG)
+                printf("wrote %d bytes into buf; remaining [%d] \n",min, length);
             file_descriptors[0][fileID] += min; 
         }
         else
         {
+            if(DEBUG)
+                printf("option3: read [%d] offset [%d]\n", read, offset);
 		    memcpy(buf+read-offset, my_buf, min);
             length -= min;
             size -= min;
             read += min;
+            if(DEBUG)
+                printf("wrote %d bytes into buf; remaining [%d] \n",min, length);
             file_descriptors[0][fileID] += min; 
         }
 
-//		printf("read: block [%d] offset [%d] min [%d]\n", fat_table[currblock].disk_block , offset, min);
+        if(DEBUG)
+		    printf("read: block [%d] offset [%d] min [%d]\n", fat_table[currblock].disk_block , offset, min);
 
 		currblock = fat_table[currblock].next_entry;
 	}
@@ -387,7 +412,9 @@ int sfs_remove(char *file)
 		return -1;
 	
 	int curr_fat = root[index].first_row;
-	root[index].filename[0] = '\0';
+    int ii;
+    for (ii =0; ii< 12; ii++)
+    	root[index].filename[ii] = '\0';
 	
 	//go thtough fat table...
 	while ( curr_fat!= 0 )
