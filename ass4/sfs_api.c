@@ -215,7 +215,10 @@ int sfs_fopen( char * name )
 
     if ( index == -1 ) {
         inode * curr = ( inode * ) malloc( sizeof( inode ) );
+        memset(curr, 0, sizeof(inode));
         strcpy( curr->filename, name );
+//        for(ii = 0 ; ii < MAX_FILENAME_LENGTH; ii++)
+//          curr->filename[ii] = name[ii];
         curr->filename[MAX_FILENAME_LENGTH + 1] = '\0';
         curr->first_row = 0;
         curr->size = 0;
@@ -281,6 +284,7 @@ void sfs_fwrite( int index, char * buf, int length )
         //write
         int min = ( length > SECTOR_SIZE ) ? SECTOR_SIZE : length ;
         void * data = malloc( SECTOR_SIZE );
+        memset(data, 0 ,SECTOR_SIZE);
         memcpy( data, buf, min );
         write_blocks( free_sector, 1, data );
         free( data );
@@ -308,6 +312,7 @@ void sfs_fwrite( int index, char * buf, int length )
         //buffer is now filled with current contents
         //we append the rest to it, and save.
         void * final = malloc( SECTOR_SIZE );
+//        memset(final, 0, SECTOR_SIZE);
         memcpy( final, buffer, ( offset % SECTOR_SIZE ) );
         int min = ( length > remaining ) ? remaining : length;
         memcpy( final + ( offset % SECTOR_SIZE ), buf, min );
@@ -340,6 +345,7 @@ void sfs_fwrite( int index, char * buf, int length )
         fat_table[fat_row].disk_block = free_slot;
         int min = ( length > SECTOR_SIZE ) ? SECTOR_SIZE : length;
         void * data = malloc( SECTOR_SIZE );
+//        memset ( data, 0, SECTOR_SIZE);
         memcpy ( data, buf, min );
         write_blocks( free_slot, 1, data ); //TODO: do I need to add padding?
         free( data );
