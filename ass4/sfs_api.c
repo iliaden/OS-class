@@ -54,7 +54,7 @@ void create_empty_table()
 
     //root and FAT are busy
     //root
-    int root_size = MAX_FILE_COUNT * 32;
+    int root_size = MAX_FILE_COUNT * sizeof(inode);
     int sectors_taken = ( root_size / SECTOR_SIZE );
 
     if ( root_size % SECTOR_SIZE > 0 )
@@ -102,9 +102,21 @@ void mksfs( int fresh )
         //write them to DISK.
         memset( root, 0, MAX_FILE_COUNT * sizeof( inode ) );
         memset( fat_table, 0, SECTOR_COUNT * sizeof( fat_entry ) );
-        write_blocks( 0, sectors_taken, ( void * ) root );
-        write_blocks( sectors_taken, fat_sectors, ( void * ) fat_table );
-        create_empty_table();
+
+        write_structs();
+/*        void * buf = malloc(sectors_taken*SECTOR_SIZE);
+        memcpy(buf, root, root_size);
+        write_blocks( 0, sectors_taken, buf );
+        free(buf);
+
+        buf = malloc(fat_sectors*SECTOR_SIZE);
+        memcpy(buf, fat_table, fat_size);
+
+        write_blocks( sectors_taken, fat_sectors, buf);
+        free(buf); 
+
+
+        create_empty_table();*/
         /*hack: create a file, then delete it*/
         int id = sfs_fopen( "AAAAAAAA.AAA" );
         char * data = calloc( 50000, sizeof( char ) );
@@ -115,9 +127,17 @@ void mksfs( int fresh )
         init_disk( DISK_LOCATION, SECTOR_SIZE, SECTOR_COUNT );
         //read root and FAT into RAM
         root =  ( inode * ) malloc ( sectors_taken * SECTOR_SIZE );
-        read_blocks( 0, sectors_taken, root );
+
+        void * buf = malloc(sectors_taken*SECTOR_SIZE);
+        read_blocks( 0, sectors_taken, buf );
+        memcpy(root, buf, root_size);
+        free(buf);
+
         fat_table = ( fat_entry * ) malloc( fat_sectors * SECTOR_COUNT );
-        read_blocks( sectors_taken, fat_sectors, fat_table );
+        buf = malloc(fat_sectors*SECTOR_SIZE);
+        read_blocks( sectors_taken, fat_sectors, buf );
+        memcpy(fat_table, buf, fat_size);
+        free(buf);
     }
 
     create_empty_table();
@@ -148,8 +168,20 @@ void write_structs()
     if ( ( sizeof( fat_entry ) * SECTOR_COUNT ) % SECTOR_SIZE > 0 )
     { fat_sectors++; }
 
-    write_blocks( 0, sectors_taken, ( void * ) root );
-    write_blocks( sectors_taken, fat_sectors, ( void * ) fat_table );
+    void * buf = malloc(sectors_taken*SECTOR_SIZE);
+    memset(buf, 0, sectors_taken*SECTOR_SIZE );
+    memcpy(buf, root, root_size);
+    write_blocks( 0, sectors_taken, buf );
+    free(buf);
+
+    buf = malloc(fat_sectors*SECTOR_SIZE);
+    memset(buf, 0, fat_sectors*SECTOR_SIZE );
+    memcpy(buf, fat_table, fat_size);
+
+    write_blocks( sectors_taken, fat_sectors, buf);
+    free(buf); 
+//    write_blocks( 0, sectors_taken, ( void * ) root );
+//    write_blocks( sectors_taken, fat_sectors, ( void * ) fat_table );
     free( empty_sectors );
     create_empty_table();
 }

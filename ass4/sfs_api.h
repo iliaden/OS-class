@@ -12,6 +12,7 @@ int find_free();
 int find_next_fat();
 void create_empty_table();
 int find_last_disk( int row );
+void write_structs();
 
 
 typedef struct {
