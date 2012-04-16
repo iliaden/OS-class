@@ -104,19 +104,6 @@ void mksfs( int fresh )
         memset( fat_table, 0, SECTOR_COUNT * sizeof( fat_entry ) );
 
         write_structs();
-/*        void * buf = malloc(sectors_taken*SECTOR_SIZE);
-        memcpy(buf, root, root_size);
-        write_blocks( 0, sectors_taken, buf );
-        free(buf);
-
-        buf = malloc(fat_sectors*SECTOR_SIZE);
-        memcpy(buf, fat_table, fat_size);
-
-        write_blocks( sectors_taken, fat_sectors, buf);
-        free(buf); 
-
-
-        create_empty_table();*/
         /*hack: create a file, then delete it*/
         int id = sfs_fopen( "AAAAAAAA.AAA" );
         char * data = calloc( 50000, sizeof( char ) );
@@ -308,14 +295,36 @@ void sfs_fwrite( int index, char * buf, int length )
         //append to current sector
         int remaining = SECTOR_SIZE - ( offset % SECTOR_SIZE );
         char * buffer = malloc( SECTOR_SIZE );
-        read_blocks( find_last_disk( root[index].first_row ) , 1, buffer );
+
+        int row = root[index].first_row;
+        int seeked = 0;
+        while ( fat_table[row].next_entry != 0 && offset < (seeked + SECTOR_SIZE ) )
+        {   
+            row = fat_table[row].next_entry; 
+            seeked += SECTOR_SIZE;
+        }
+
+        read_blocks( fat_table[row].disk_block , 1, buffer );
+
         //buffer is now filled with current contents
         //we append the rest to it, and save.
         void * final = malloc( SECTOR_SIZE );
-//        memset(final, 0, SECTOR_SIZE);
+        memset(final, 0, SECTOR_SIZE);
         memcpy( final, buffer, ( offset % SECTOR_SIZE ) );
         int min = ( length > remaining ) ? remaining : length;
         memcpy( final + ( offset % SECTOR_SIZE ), buf, min );
+        //refill it afterwards...
+        int left = SECTOR_SIZE - ((offset%SECTOR_SIZE) + min);
+        int buf_left = root[index].size - seeked - min - (offset%SECTOR_SIZE);
+        if (buf_left > left)
+            buf_left = left;
+
+        if ( DEBUG)
+            printf ( "seeked = [%d], offset = [%d] buf_left = [%d]\n", seeked, offset, buf_left);
+
+        if ( left > 0 && buf_left > 0)
+            memcpy (final + min + (offset%SECTOR_SIZE), buffer, buf_left);
+
         write_blocks( find_last_disk( root[index].first_row ), 1, final );
         root[index].size += min;
         root[index].last_access_time = time( NULL );
@@ -332,20 +341,22 @@ void sfs_fwrite( int index, char * buf, int length )
         }
 
         return;
-    } else {
+    } else if (root[index].size == offset){ //only if we're at the end!!!
+        //now, I try seeking only until the offset...
         //find next free sector
         int free_slot = find_free();
         int fat_row = find_next_fat();
         int row = root[index].first_row;
 
         while ( fat_table[row].next_entry != 0 )
-        { row = fat_table[row].next_entry; }
-
+        {   
+            row = fat_table[row].next_entry; 
+        }
         fat_table[row].next_entry = fat_row;
         fat_table[fat_row].disk_block = free_slot;
         int min = ( length > SECTOR_SIZE ) ? SECTOR_SIZE : length;
         void * data = malloc( SECTOR_SIZE );
-//        memset ( data, 0, SECTOR_SIZE);
+        memset ( data, 0, SECTOR_SIZE);
         memcpy ( data, buf, min );
         write_blocks( free_slot, 1, data ); //TODO: do I need to add padding?
         free( data );
@@ -361,6 +372,35 @@ void sfs_fwrite( int index, char * buf, int length )
         } else {
             write_structs();
         }
+    }
+    else
+    {//seek until required row, then write there. do NOT touch the FAT table. (seek to middle and write there)
+        int row = root[index].first_row;
+      
+        int seeked = 0;
+        while ( fat_table[row].next_entry != 0 && seeked != offset )
+        {   
+            row = fat_table[row].next_entry; 
+            seeked += SECTOR_SIZE;
+        }
+
+        int min = ( length > SECTOR_SIZE ) ? SECTOR_SIZE : length;
+        void * data = malloc( SECTOR_SIZE );
+        memset ( data, 0, SECTOR_SIZE);
+        memcpy ( data, buf, min );
+        write_blocks( fat_table[row].disk_block, 1, data ); //TODO: do I need to add padding?
+        free( data );
+        root[index].last_access_time = time( NULL );
+        root[index].last_modified_time = time( NULL );
+        file_descriptors[1][index] += min;
+
+        if ( length > SECTOR_SIZE ) {
+            //if we still need to write more
+            sfs_fwrite( index, buf + min, length - min );
+        } else {
+           ;
+        }
+
     }
 }
 void sfs_fread( int fileID, char * buf, int length )
@@ -433,6 +473,8 @@ void sfs_fread( int fileID, char * buf, int length )
 }
 void sfs_fseek( int fileID, int loc )
 {
+    if (DEBUG)
+      printf("seeking file [%d] to position [%d]\n",fileID, loc);
     file_descriptors[0][fileID] = loc;
     file_descriptors[1][fileID] = loc;
 }
